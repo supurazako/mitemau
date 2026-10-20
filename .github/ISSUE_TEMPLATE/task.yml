@@ -1,27 +1,27 @@
-name: タスク
-description: 目的と完了条件をそろえて作業を登録します
+name: Task
+description: Capture the goal and acceptance criteria for a task
 body:
   - type: textarea
     id: purpose
     attributes:
-      label: 目的
-      description: この作業で達成したいこと
-      placeholder: 何を実現するためのタスクかを書いてください
+      label: Goal
+      description: What this task is intended to achieve
+      placeholder: Describe what this task should accomplish
     validations:
       required: true
   - type: textarea
     id: acceptance-criteria
     attributes:
-      label: 完了条件
-      description: 何ができたら完了か
-      placeholder: 完了した状態を具体的に書いてください
+      label: Acceptance criteria
+      description: What must be true for this task to be complete
+      placeholder: Describe the completed state in concrete terms
     validations:
       required: true
   - type: textarea
     id: context
     attributes:
-      label: 前提・関連情報
-      description: MOQTドラフト版、利用する実装、検討事項、関連Issueなど
-      placeholder: 必要な前提やリンクを書いてください
+      label: Context and related information
+      description: MOQT draft version, implementation in use, open questions, related issues, etc.
+      placeholder: Add relevant assumptions, decisions, and links
     validations:
       required: false
