@@ -1,0 +1,30 @@
+name: moqtail-relay
+
+services:
+  relay:
+    image: ghcr.io/moqtail/relay@sha256:7e5ee7f10ac1d6cf785be8a0964824c4b629ea8a9b6bf8387ab830d50e9eae36
+    container_name: moqtail-relay
+    pull_policy: never
+    user: "65532:65532"
+    userns_mode: host
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "4433:4433/udp"
+    volumes:
+      - /var/lib/moqtail-relay/certs:/certs:ro
+      - /var/lib/moqtail-relay/logs:/logs:rw
+      - /var/lib/moqtail-relay/tmp:/tmp:rw
+    command:
+      - --host
+      - 0.0.0.0
+      - --cert-file
+      - /certs/cert.pem
+      - --key-file
+      - /certs/key.pem
+      - --log-folder
+      - /logs
+    stop_grace_period: 15s
