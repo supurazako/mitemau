@@ -6,7 +6,7 @@ help:
 	@printf '%s\n' \
 		'Available commands:' \
 		'help	Show available commands' \
-		'dev	Start the Go API loccally'
+		'dev	Start the Go API locally'
 
 dev:
 	@set -eu; set -a; \
