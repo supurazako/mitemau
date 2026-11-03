@@ -1,27 +1,13 @@
+---
 name: Task
-description: Capture the goal and acceptance criteria for a task
-body:
-  - type: markdown
-    id: purpose
-    attributes:
-      label: Goal
-      description: What this task is intended to achieve
-      placeholder: Describe what this task should accomplish
-    validations:
-      required: false
-  - type: markdown
-    id: acceptance-criteria
-    attributes:
-      label: Acceptance criteria
-      description: What must be true for this task to be complete
-      placeholder: Describe the completed state in concrete terms
-    validations:
-      required: false
-  - type: markdown
-    id: context
-    attributes:
-      label: Context and related information
-      description: MOQT draft version, implementation in use, open questions, related issues, etc.
-      placeholder: Add relevant assumptions, decisions, and links
-    validations:
-      required: false
+about: Capture the goal and acceptance criteria for a task
+title: ""
+labels: []
+assignees: []
+---
+
+## Goal
+
+## Acceptance criteria
+
+## Context and related information
