@@ -1,23 +1,23 @@
 name: Task
 description: Capture the goal and acceptance criteria for a task
 body:
-  - type: textarea
+  - type: markdown
     id: purpose
     attributes:
       label: Goal
       description: What this task is intended to achieve
       placeholder: Describe what this task should accomplish
     validations:
-      required: true
-  - type: textarea
+      required: false
+  - type: markdown
     id: acceptance-criteria
     attributes:
       label: Acceptance criteria
       description: What must be true for this task to be complete
       placeholder: Describe the completed state in concrete terms
     validations:
-      required: true
-  - type: textarea
+      required: false
+  - type: markdown
     id: context
     attributes:
       label: Context and related information
