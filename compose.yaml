@@ -10,6 +10,12 @@ services:
       - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+  migrate:
+    image: migrate/migrate:v4.20.1
+    profiles:
+      - tools
+    volumes:
+      - ./backend/migrations:/migrations:ro
 
 volumes:
   mysql_data:
