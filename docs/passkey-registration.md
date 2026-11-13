@@ -8,7 +8,7 @@ After email verification, select **Register a Passkey**. Successful registration
 
 Challenges expire after five minutes (or earlier if email verification expires); sessions have a 24-hour inactivity timeout and a seven-day absolute lifetime. Configure these with `PASSKEY_CHALLENGE_TTL`, `SESSION_TTL`, and `SESSION_ABSOLUTE_TTL`. Cancellation leaves email verification usable until its original expiry. A fresh attempt replaces the previous challenge; completed invalid attempts consume the challenge. Account email uniqueness is enforced in MySQL, including concurrent registrations.
 
-Normal sign-in, sign-out and renewal are described in [Passkey sign-in and sessions](passkey-sign-in.md). Backup Passkeys follow in #18; recovery-code issuance and recovery follow in #19. Initial registration creates no recovery codes yet.
+Normal sign-in, sign-out and renewal are described in [Passkey sign-in and sessions](passkey-sign-in.md). Additional credentials are described in [Backup Passkeys](backup-passkeys.md); recovery-code issuance and recovery follow in #19. Initial registration creates no recovery codes yet.
 
 ## Verification
 

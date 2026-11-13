@@ -22,9 +22,16 @@ import (
 )
 
 func registrationResponse(t *testing.T, options *httptest.ResponseRecorder, origin string, uv bool) string {
+	body, _ := registrationFixtureResponse(t, options, origin, uv)
+	return body
+}
+func registrationFixtureResponse(t *testing.T, options *httptest.ResponseRecorder, origin string, uv bool) (string, loginFixture) {
 	t.Helper()
 	var parsed struct {
 		Challenge string `json:"challenge"`
+		User      struct {
+			ID string `json:"id"`
+		} `json:"user"`
 	}
 	if err := json.Unmarshal(options.Body.Bytes(), &parsed); err != nil {
 		t.Fatal(err)
@@ -59,7 +66,11 @@ func registrationResponse(t *testing.T, options *httptest.ResponseRecorder, orig
 	clientData, _ := json.Marshal(map[string]any{"type": "webauthn.create", "challenge": parsed.Challenge, "origin": origin, "crossOrigin": false})
 	enc := base64.RawURLEncoding.EncodeToString
 	body, _ := json.Marshal(map[string]any{"id": enc(id), "rawId": enc(id), "type": "public-key", "clientExtensionResults": map[string]any{}, "response": map[string]any{"clientDataJSON": enc(clientData), "attestationObject": enc(attestation), "transports": []string{"internal"}}})
-	return string(body)
+	userID, err := base64.RawURLEncoding.DecodeString(parsed.User.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body), loginFixture{userID: userID, credentialID: id, key: key}
 }
 func TestPasskeyConfig(t *testing.T) {
 	t.Setenv("WEBAUTHN_RP_ID", "localhost")

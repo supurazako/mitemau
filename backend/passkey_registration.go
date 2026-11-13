@@ -82,6 +82,9 @@ func (p *passkeyServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /session/renew", p.verification.protect(p.renewSession))
 	mux.HandleFunc("POST /login/passkey/options", p.verification.protect(p.beginLogin))
 	mux.HandleFunc("POST /login/passkey/finish", p.verification.protect(p.finishLogin))
+	mux.HandleFunc("POST /account/passkeys/verify/options", p.verification.protect(p.beginBackupVerification))
+	mux.HandleFunc("POST /account/passkeys/verify/finish", p.verification.protect(p.verifyBackupPasskey))
+	mux.HandleFunc("POST /account/passkeys/finish", p.verification.protect(p.finishBackupPasskey))
 	mux.HandleFunc("POST /logout", p.verification.protect(p.signOut))
 }
 func registrationGrant(ctx context.Context, tx *sql.Tx, token string, now time.Time) (registrationUser, time.Time, error) {

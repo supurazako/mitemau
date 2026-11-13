@@ -39,6 +39,7 @@
 - Failed or canceled reauthentication does not authorize enrollment.
 - Failed or canceled enrollment leaves the existing Passkeys unchanged.
 - Invalid, expired, or reused challenges are rejected.
+- Each step expires after five minutes by default and requires the original session to remain valid. Cancellation and failure restart verification in the UI; see [backup Passkeys](backup-passkeys.md).
 
 ## Account recovery
 
