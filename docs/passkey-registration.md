@@ -15,4 +15,4 @@ Normal sign-in, sign-out and session renewal follow in #17. Backup Passkeys foll
 - `go test -race ./...` and `go vet ./...` in `backend`; set `MYSQL_TEST_DSN` to an explicitly disposable, migrated database for integration tests.
 - `npm run build` and `npm run lint` in `frontend`.
 - Automated browser check: Chrome for Testing **158.0.8127.18**, headless, with a CDP CTAP2.1 virtual authenticator supporting resident keys and user verification. Confirmed native JSON conversion APIs, email delivery through Mailpit, registration, persisted resident credential, automatic sign-in, reload, and duplicate email rejection.
-- Real-device Passkey storage and PIN/biometric prompts remain for human verification. The virtual authenticator result does not establish compatibility with every device or password manager.
+- Manual check: the user reported successful registration and signed-in state persistence after reloading. The browser/version, authenticator, and PIN/biometric method were not recorded for this check. These results do not establish compatibility with every device or password manager.
