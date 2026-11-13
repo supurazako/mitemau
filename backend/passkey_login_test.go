@@ -54,6 +54,34 @@ func (f loginFixture) assertion(t *testing.T, options *httptest.ResponseRecorder
 	body, _ := json.Marshal(map[string]any{"id": enc(f.credentialID), "rawId": enc(f.credentialID), "type": "public-key", "clientExtensionResults": map[string]any{}, "response": map[string]any{"clientDataJSON": enc(client), "authenticatorData": enc(auth), "signature": enc(signature), "userHandle": enc(f.userID)}})
 	return string(body)
 }
+func seedLoginFixture(t *testing.T, db *sql.DB) loginFixture {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := loginFixture{userID: make([]byte, 32), credentialID: make([]byte, 32), key: key}
+	_, _ = rand.Read(fixture.userID)
+	_, _ = rand.Read(fixture.credentialID)
+	token, _ := newToken()
+	fixture.email = "login-" + token[:20] + "@example.test"
+	public, err := cbor.Marshal(map[int]any{1: 2, 3: -7, -1: 1, -2: key.X.FillBytes(make([]byte, 32)), -3: key.Y.FillBytes(make([]byte, 32))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cred := webauthn.Credential{ID: fixture.credentialID, PublicKey: public, AttestationType: "none", Flags: webauthn.NewCredentialFlags(protocol.AuthenticatorFlags(5))}
+	raw, _ := json.Marshal(cred)
+	hash := sha256.Sum256(fixture.credentialID)
+	now := time.Now().UTC()
+	if _, err = db.Exec(`INSERT INTO accounts (id,email,created_at) VALUES (?,?,?)`, fixture.userID, fixture.email, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`INSERT INTO passkey_credentials (id_hash,account_id,credential,created_at) VALUES (?,?,?,?)`, hash[:], fixture.userID, raw, now); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM accounts WHERE id=?`, fixture.userID) })
+	return fixture
+}
 func TestSignInAndSessionsMySQL(t *testing.T) {
 	dsn := os.Getenv("MYSQL_TEST_DSN")
 	if dsn == "" {
@@ -73,30 +101,7 @@ func TestSignInAndSessionsMySQL(t *testing.T) {
 		}
 		mux := http.NewServeMux()
 		p.routes(mux)
-		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-		if err != nil {
-			t.Fatal(err)
-		}
-		fixture := loginFixture{userID: make([]byte, 32), credentialID: make([]byte, 32), key: key}
-		_, _ = rand.Read(fixture.userID)
-		_, _ = rand.Read(fixture.credentialID)
-		token, _ := newToken()
-		fixture.email = "login-" + token[:20] + "@example.test"
-		public, err := cbor.Marshal(map[int]any{1: 2, 3: -7, -1: 1, -2: key.X.FillBytes(make([]byte, 32)), -3: key.Y.FillBytes(make([]byte, 32))})
-		if err != nil {
-			t.Fatal(err)
-		}
-		cred := webauthn.Credential{ID: fixture.credentialID, PublicKey: public, AttestationType: "none", Flags: webauthn.NewCredentialFlags(protocol.AuthenticatorFlags(5))}
-		raw, _ := json.Marshal(cred)
-		hash := sha256.Sum256(fixture.credentialID)
-		now := time.Now().UTC()
-		if _, err = db.Exec(`INSERT INTO accounts (id,email,created_at) VALUES (?,?,?)`, fixture.userID, fixture.email, now); err != nil {
-			t.Fatal(err)
-		}
-		if _, err = db.Exec(`INSERT INTO passkey_credentials (id_hash,account_id,credential,created_at) VALUES (?,?,?,?)`, hash[:], fixture.userID, raw, now); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM accounts WHERE id=?`, fixture.userID) })
+		fixture := seedLoginFixture(t, db)
 		return p, mux, fixture
 	}
 	begin := func(t *testing.T, mux http.Handler, old *http.Cookie) (*httptest.ResponseRecorder, *http.Cookie) {

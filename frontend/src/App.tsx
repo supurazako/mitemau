@@ -1,4 +1,5 @@
 import './App.css'
+import BackupPasskey from './BackupPasskey'
 import { useEffect, useState } from 'react'
 import { notifySessionChange, useSessionActivity } from './useSessionActivity'
 import type { AccountSession } from './useSessionActivity'
@@ -215,6 +216,7 @@ function App() {
           <h2>Signed in</h2>
           <p>You are signed in as {account.email}.</p>
           <button type="button" disabled={busy} onClick={() => void signOut()}>Sign out</button>
+          <BackupPasskey key={account.email} busy={busy} onBusy={setBusy} />
         </section> : <>
         <section aria-label="Sign in">
           <h2>Sign in</h2>
