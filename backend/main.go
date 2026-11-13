@@ -3,12 +3,13 @@ package main
 import (
 	"context"
 	"database/sql"
-	"github.com/go-sql-driver/mysql"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/go-sql-driver/mysql"
 )
 
 func main() {
@@ -35,6 +36,10 @@ func main() {
 		os.Getenv("MYSQL_PORT"),
 	)
 	cfg.DBName = os.Getenv("MYSQL_DATABASE")
+	cfg.ParseTime = true
+	cfg.Timeout = 5 * time.Second
+	cfg.ReadTimeout = 10 * time.Second
+	cfg.WriteTimeout = 10 * time.Second
 
 	dsn := cfg.FormatDSN()
 
@@ -52,9 +57,18 @@ func main() {
 	}
 	log.Println("connected to MySQL")
 
-	http.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	verificationCfg, sender, err := emailConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	verification := newVerificationServer(db, sender, verificationCfg)
+	verification.routes(mux)
+	go verification.runCleanup(context.Background())
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok\n"))
 	})
 
-	log.Fatal(http.ListenAndServe("localhost:8080", nil))
+	server := &http.Server{Addr: envDefault("API_ADDR", "localhost:8080"), Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	log.Fatal(server.ListenAndServe())
 }

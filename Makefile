@@ -1,14 +1,18 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help dev migrate-up
+.PHONY: help frontend backend migrate-up
 
 help:
 	@printf '%-14s %s\n' \
 		'help' 'Show available commands' \
-		'dev' 'Start the Go API locally' \
+		'frontend' 'Start the React frontend locally' \
+		'backend' 'Start the Go API locally' \
 		'migrate-up' 'Apply pending database migrations'
 
-dev:
+frontend:
+	cd frontend && npm run dev
+
+backend:
 	@set -eu; set -a; \
 		. ./.env; \
 		set +a; \

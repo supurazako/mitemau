@@ -9,4 +9,4 @@ Do not modify successfully applied, shared migrations.
 If a migration fails, inspect and repair the database before using `force`;
 it updates migration metadata without executing SQL.
 
-Application and reapplication checks are deferred until the first application migration.
+The first migration creates email verification state. Apply and reapply it to verify migration tracking.
