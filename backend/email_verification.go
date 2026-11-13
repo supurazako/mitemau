@@ -38,10 +38,11 @@ type mailSender interface {
 }
 
 type verificationServer struct {
-	db     *sql.DB
-	sender mailSender
-	config verificationConfig
-	now    func() time.Time
+	db              *sql.DB
+	sender          mailSender
+	config          verificationConfig
+	now             func() time.Time
+	registeredEmail func(context.Context, string) (bool, error)
 }
 
 func newVerificationServer(db *sql.DB, sender mailSender, cfg verificationConfig) *verificationServer {
@@ -170,6 +171,17 @@ func (s *verificationServer) requestCode(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		problem(w, 400, "Enter a valid email address")
 		return
+	}
+	if s.registeredEmail != nil {
+		exists, err := s.registeredEmail(r.Context(), email)
+		if err != nil {
+			problem(w, 503, "Registration is temporarily unavailable")
+			return
+		}
+		if exists {
+			problem(w, 409, "This email address is already registered. Please sign in")
+			return
+		}
 	}
 	token, err := newToken()
 	if err != nil {
