@@ -14,6 +14,8 @@
 - Each enrollment attempt uses a new WebAuthn challenge.
 - If the registration state expires, the user must verify their email address again.
 - Incomplete registrations must not reserve an email address permanently.
+- Email verification uses six-digit codes valid for 10 minutes, with five attempts per code and a 60-second resend interval. Resending invalidates the previous code.
+- Successful email verification authorizes Passkey enrollment for 30 minutes in the same browser. These limits are configurable.
 
 ## Sign-in and sign-out
 
@@ -54,11 +56,12 @@
 
 ## Failure cases and unresolved decisions
 
-- Define expiration times for email verification codes, temporary registration and recovery states, and WebAuthn challenges.
-- Define code formats, attempt limits, and resend limits for registration and recovery.
+- Define expiration times for recovery states and WebAuthn challenges.
+- Define code formats, attempt limits, and resend limits for recovery.
 - Define session expiration and renewal, cookie attributes, and CSRF protection.
-- Define how registration resumes in the same browser and how temporary state is protected.
+- Registration resumes using an opaque HttpOnly cookie linked to server-side verification state; Passkey enrollment must validate and consume that state.
 - Define how recovery resumes after cancellation or failure without consuming an offline recovery code prematurely.
 - Define whether issuing replacement offline recovery codes invalidates all previously issued codes.
-- Define how concurrent registration or recovery attempts are handled.
+- Email resends replace pending codes but do not revoke already verified registration states in other browsers.
+- Define how concurrent account creation and recovery attempts are handled.
 - Select the WebAuthn libraries and email delivery method in their related issues.
