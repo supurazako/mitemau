@@ -6,9 +6,9 @@ Stop the API, run `make migrate-up`, then restart with `make backend`. Run `make
 
 After email verification, select **Register a Passkey**. Successful registration atomically stores the account, full credential record, and a server-side session, consuming the browser's verified email state. The session cookie is opaque and HttpOnly. Reloading restores the signed-in display.
 
-Challenges expire after five minutes (or earlier if email verification expires); sessions expire after 24 hours. Configure these with `PASSKEY_CHALLENGE_TTL` and `SESSION_TTL`. Cancellation leaves email verification usable until its original expiry. A fresh attempt replaces the previous challenge; completed invalid attempts consume the challenge. Account email uniqueness is enforced in MySQL, including concurrent registrations.
+Challenges expire after five minutes (or earlier if email verification expires); sessions have a 24-hour inactivity timeout and a seven-day absolute lifetime. Configure these with `PASSKEY_CHALLENGE_TTL`, `SESSION_TTL`, and `SESSION_ABSOLUTE_TTL`. Cancellation leaves email verification usable until its original expiry. A fresh attempt replaces the previous challenge; completed invalid attempts consume the challenge. Account email uniqueness is enforced in MySQL, including concurrent registrations.
 
-Normal sign-in, sign-out and session renewal follow in #17. Backup Passkeys follow in #18; recovery-code issuance and recovery follow in #19. Initial registration creates no recovery codes yet.
+Normal sign-in, sign-out and renewal are described in [Passkey sign-in and sessions](passkey-sign-in.md). Backup Passkeys follow in #18; recovery-code issuance and recovery follow in #19. Initial registration creates no recovery codes yet.
 
 ## Verification
 

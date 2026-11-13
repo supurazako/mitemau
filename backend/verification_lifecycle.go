@@ -78,7 +78,9 @@ func (s *verificationServer) cleanup(ctx context.Context) error {
 	}{
 		{`DELETE FROM email_verifications WHERE last_sent_at<=? LIMIT 1000`, now.Add(-pendingTTL)},
 		{`DELETE FROM registration_ceremonies WHERE expires_at<=? LIMIT 1000`, now},
+		{`DELETE FROM login_ceremonies WHERE expires_at<=? LIMIT 1000`, now},
 		{`DELETE FROM account_sessions WHERE expires_at<=? LIMIT 1000`, now},
+		{`DELETE FROM account_sessions WHERE absolute_expires_at<=? LIMIT 1000`, now},
 		{`DELETE FROM verified_registrations WHERE expires_at<=? LIMIT 1000`, now},
 		{`DELETE FROM email_send_limits WHERE window_start<=? LIMIT 1000`, now.Add(-s.config.SendWindow)},
 	}

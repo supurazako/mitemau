@@ -1,5 +1,7 @@
 import './App.css'
 import { useEffect, useState } from 'react'
+import { notifySessionChange, useSessionActivity } from './useSessionActivity'
+import type { AccountSession } from './useSessionActivity'
 
 type Verification = {
   email?: string
@@ -8,8 +10,6 @@ type Verification = {
   codeExpired?: boolean
   retryAfterSeconds?: number
 }
-
-type AccountSession = { signedIn: boolean; email?: string; expiresAt?: string }
 
 function App() {
   const [account, setAccount] = useState<AccountSession>({ signedIn: false })
@@ -55,6 +55,33 @@ function App() {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    async function refreshSession() {
+      try {
+        const response = await fetch('/api/session', { signal: controller.signal })
+        if (!response.ok) return
+        const result: AccountSession = await response.json()
+        if (!controller.signal.aborted) setAccount(result)
+      } catch { /* Keep the last known display when offline; the server checks authorization. */ }
+    }
+    const onVisible = () => { if (document.visibilityState === 'visible') void refreshSession() }
+    window.addEventListener('focus', onVisible)
+    document.addEventListener('visibilitychange', onVisible)
+    const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('mitemau-session')
+    if (channel) channel.onmessage = () => void refreshSession()
+    return () => {
+      controller.abort()
+      window.removeEventListener('focus', onVisible)
+      document.removeEventListener('visibilitychange', onVisible)
+      channel?.close()
+    }
+  }, [])
+
+  const sessionExpired = Boolean(account.signedIn && account.expiresAt && Date.parse(account.expiresAt) <= now)
+  const signedIn = account.signedIn && !sessionExpired
+  useSessionActivity(account, signedIn, setAccount)
 
   const remaining = Math.max(0, Math.ceil((retryUntil - now) / 1000))
   const expired = Boolean(verification?.expiresAt && Date.parse(verification.expiresAt) <= now)
@@ -113,6 +140,7 @@ function App() {
       if (!response.ok) throw new Error(result.error || 'Could not complete registration.')
       setAccount(result)
       setVerification(null)
+      notifySessionChange()
     } catch (err) {
       if (err instanceof DOMException && err.name === 'NotAllowedError') {
         setError('Passkey registration was canceled or timed out. You can try again while your email verification is valid.')
@@ -124,14 +152,77 @@ function App() {
     }
   }
 
+  async function signIn() {
+    setBusy(true)
+    setError('')
+    try {
+      if (!window.isSecureContext || typeof PublicKeyCredential === 'undefined' ||
+          typeof PublicKeyCredential.parseRequestOptionsFromJSON !== 'function' ||
+          typeof PublicKeyCredential.prototype.toJSON !== 'function') {
+        throw new Error('This browser does not support Passkey sign-in here. Use a current Chrome or Chromium browser on localhost or HTTPS.')
+      }
+      const response = await fetch('/api/login/passkey/options', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      })
+      const options = await response.json()
+      if (!response.ok) throw new Error(options.error || 'Could not start sign-in.')
+      const publicKey = PublicKeyCredential.parseRequestOptionsFromJSON(options)
+      const credential = await navigator.credentials.get({ publicKey })
+      if (!(credential instanceof PublicKeyCredential)) throw new Error('No Passkey was selected. Please try again.')
+      const finish = await fetch('/api/login/passkey/finish', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credential.toJSON()),
+      })
+      const result = await finish.json()
+      if (!finish.ok) throw new Error(result.error || 'Could not complete sign-in.')
+      setAccount(result)
+      setVerification(null)
+      setNow(Date.now())
+      notifySessionChange()
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'NotAllowedError') {
+        setError('Passkey sign-in was canceled or timed out. You can try again.')
+      } else {
+        setError(err instanceof Error ? err.message : 'Could not sign in. Please try again.')
+      }
+    } finally { setBusy(false) }
+  }
+
+  async function signOut() {
+    setBusy(true)
+    setError('')
+    try {
+      const response = await fetch('/api/logout', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Could not sign out. Please try again.')
+      setAccount({ signedIn: false })
+      setVerification(null)
+      setEmail('')
+      setCode('')
+      notifySessionChange()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not sign out. Please try again.')
+    } finally { setBusy(false) }
+  }
+
   return (
     <main className="registration">
-      <h1>Create an account</h1>
+      <h1>Mitemau</h1>
       {loading ? <p role="status">Loading…</p> : <>
-        {account.signedIn ? <section aria-label="Registration complete">
-          <h2>Account created</h2>
+        {signedIn ? <section aria-label="Signed-in account">
+          <h2>Signed in</h2>
           <p>You are signed in as {account.email}.</p>
-        </section> : verified ? <section aria-label="Email verification complete">
+          <button type="button" disabled={busy} onClick={() => void signOut()}>Sign out</button>
+        </section> : <>
+        <section aria-label="Sign in">
+          <h2>Sign in</h2>
+          {sessionExpired && <p role="status">Your session expired. Please sign in again.</p>}
+          <button type="button" disabled={busy} onClick={() => void signIn()}>Sign in with a Passkey</button>
+        </section>
+        <h2>Create an account</h2>
+        {verified ? <section aria-label="Email verification complete">
           <h2>Email verified</h2>
           <p>{verification?.email}</p>
           <p>Account setup is not complete. Your email verification is valid until{' '}
@@ -170,6 +261,7 @@ function App() {
               setError('')
             }}>Use another email address</button>
           </>}
+        </>}
         </>}
         {busy && <p role="status">Please wait…</p>}
         {error && <p role="alert">{error}</p>}
