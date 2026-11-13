@@ -25,7 +25,8 @@
 4. Signing out invalidates the current browser session. Sessions on other browsers remain active.
 
 - Failed authentication does not create a session.
-- Invalid, expired, or reused authentication challenges are rejected.
+- Invalid, expired, or reused authentication challenges are rejected. Challenges last five minutes by default.
+- Sessions expire after 24 hours of inactivity or seven days after sign-in, whichever comes first. Interaction and ongoing viewing/broadcasting count as activity; passive session status polling does not. See [session behavior](passkey-sign-in.md).
 
 ## Adding a backup Passkey
 
@@ -58,10 +59,10 @@
 
 - Define expiration times for recovery states and WebAuthn challenges.
 - Define code formats, attempt limits, and resend limits for recovery.
-- Define session expiration and renewal, cookie attributes, and CSRF protection.
+- Sessions use opaque HttpOnly, SameSite=Strict cookies (Secure in HTTPS deployments). Mutations require JSON and validate the configured origin; session status reads never renew sessions.
 - Registration resumes using an opaque HttpOnly cookie linked to server-side verification state; Passkey enrollment must validate and consume that state.
 - Define how recovery resumes after cancellation or failure without consuming an offline recovery code prematurely.
 - Define whether issuing replacement offline recovery codes invalidates all previously issued codes.
 - Email resends replace pending codes but do not revoke already verified registration states in other browsers.
 - Define how concurrent account creation and recovery attempts are handled.
-- Select the WebAuthn libraries and email delivery method in their related issues.
+- Production email delivery remains to be selected; local SMTP uses Mailpit.

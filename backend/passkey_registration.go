@@ -33,6 +33,7 @@ type passkeyServer struct {
 	verification             *verificationServer
 	wa                       *webauthn.WebAuthn
 	challengeTTL, sessionTTL time.Duration
+	sessionAbsoluteTTL       time.Duration
 }
 
 func newPasskeyServer(v *verificationServer) (*passkeyServer, error) {
@@ -43,6 +44,13 @@ func newPasskeyServer(v *verificationServer) (*passkeyServer, error) {
 	sessionTTL, err := positiveDuration("SESSION_TTL", "24h")
 	if err != nil {
 		return nil, err
+	}
+	absoluteTTL, err := positiveDuration("SESSION_ABSOLUTE_TTL", "168h")
+	if err != nil {
+		return nil, err
+	}
+	if absoluteTTL < sessionTTL {
+		return nil, errors.New("SESSION_ABSOLUTE_TTL must be at least SESSION_TTL")
 	}
 	rpID := envDefault("WEBAUTHN_RP_ID", "localhost")
 	origin, err := url.Parse(v.config.Origin)
@@ -60,17 +68,21 @@ func newPasskeyServer(v *verificationServer) (*passkeyServer, error) {
 			RequireResidentKey: protocol.ResidentKeyRequired(),
 			UserVerification:   protocol.VerificationRequired,
 		},
-		Timeouts: webauthn.TimeoutsConfig{Registration: webauthn.TimeoutConfig{Enforce: true, Timeout: challengeTTL}},
+		Timeouts: webauthn.TimeoutsConfig{Registration: webauthn.TimeoutConfig{Enforce: true, Timeout: challengeTTL}, Login: webauthn.TimeoutConfig{Enforce: true, Timeout: challengeTTL}},
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &passkeyServer{verification: v, wa: wa, challengeTTL: challengeTTL, sessionTTL: sessionTTL}, nil
+	return &passkeyServer{verification: v, wa: wa, challengeTTL: challengeTTL, sessionTTL: sessionTTL, sessionAbsoluteTTL: absoluteTTL}, nil
 }
 func (p *passkeyServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /registration/passkey/options", p.verification.protect(p.begin))
 	mux.HandleFunc("POST /registration/passkey/finish", p.verification.protect(p.finish))
 	mux.HandleFunc("GET /session", p.session)
+	mux.HandleFunc("POST /session/renew", p.verification.protect(p.renewSession))
+	mux.HandleFunc("POST /login/passkey/options", p.verification.protect(p.beginLogin))
+	mux.HandleFunc("POST /login/passkey/finish", p.verification.protect(p.finishLogin))
+	mux.HandleFunc("POST /logout", p.verification.protect(p.signOut))
 }
 func registrationGrant(ctx context.Context, tx *sql.Tx, token string, now time.Time) (registrationUser, time.Time, error) {
 	var user registrationUser
@@ -236,7 +248,7 @@ func (p *passkeyServer) finish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sessionExpires := now.Add(p.sessionTTL)
-	_, err = tx.ExecContext(r.Context(), `INSERT INTO account_sessions (token_hash,account_id,expires_at) VALUES (?,?,?)`, tokenHash(newSession), user.ID, sessionExpires)
+	_, err = tx.ExecContext(r.Context(), `INSERT INTO account_sessions (token_hash,account_id,expires_at,absolute_expires_at) VALUES (?,?,?,?)`, tokenHash(newSession), user.ID, sessionExpires, now.Add(p.sessionAbsoluteTTL))
 	if err != nil {
 		problem(w, 503, "Could not create a session")
 		return
@@ -253,7 +265,7 @@ func (p *passkeyServer) finish(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: newSession, Path: "/", MaxAge: int(p.sessionTTL.Seconds()), HttpOnly: true, Secure: p.verification.config.SecureCookie, SameSite: http.SameSiteStrictMode})
 	http.SetCookie(w, &http.Cookie{Name: registrationCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: p.verification.config.SecureCookie, SameSite: http.SameSiteStrictMode})
-	writeJSON(w, 201, map[string]any{"email": user.Email, "signedIn": true, "expiresAt": sessionExpires})
+	writeJSON(w, 201, map[string]any{"email": user.Email, "signedIn": true, "expiresAt": sessionExpires, "renewAfterSeconds": p.renewAfterSeconds()})
 }
 func (p *passkeyServer) session(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(sessionCookie)
@@ -264,8 +276,8 @@ func (p *passkeyServer) session(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	var email string
-	var expires time.Time
-	err = p.verification.db.QueryRowContext(ctx, `SELECT a.email,s.expires_at FROM account_sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.expires_at>?`, tokenHash(cookie.Value), p.verification.now()).Scan(&email, &expires)
+	var expires, absolute time.Time
+	err = p.verification.db.QueryRowContext(ctx, `SELECT a.email,s.expires_at,s.absolute_expires_at FROM account_sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.expires_at>? AND s.absolute_expires_at>?`, tokenHash(cookie.Value), p.verification.now(), p.verification.now()).Scan(&email, &expires, &absolute)
 	if err == sql.ErrNoRows {
 		writeJSON(w, 200, map[string]bool{"signedIn": false})
 		return
@@ -274,7 +286,7 @@ func (p *passkeyServer) session(w http.ResponseWriter, r *http.Request) {
 		problem(w, 503, "Session is temporarily unavailable")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"email": email, "signedIn": true, "expiresAt": expires})
+	writeJSON(w, 200, map[string]any{"email": email, "signedIn": true, "expiresAt": minTime(expires, absolute), "renewAfterSeconds": p.renewAfterSeconds()})
 }
 
 // Comparing normalized email addresses follows the existing ASCII policy.
