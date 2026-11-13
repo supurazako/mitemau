@@ -9,7 +9,10 @@ type Verification = {
   retryAfterSeconds?: number
 }
 
+type AccountSession = { signedIn: boolean; email?: string; expiresAt?: string }
+
 function App() {
+  const [account, setAccount] = useState<AccountSession>({ signedIn: false })
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [verification, setVerification] = useState<Verification | null>(null)
@@ -23,6 +26,13 @@ function App() {
     const controller = new AbortController()
     async function restore() {
       try {
+        const sessionResponse = await fetch('/api/session', { signal: controller.signal })
+        if (!sessionResponse.ok) throw new Error('Could not restore your session. Reload to try again.')
+        const restoredSession: AccountSession = await sessionResponse.json()
+        if (restoredSession.signedIn) {
+          if (!controller.signal.aborted) setAccount(restoredSession)
+          return
+        }
         const response = await fetch('/api/registration/email', { signal: controller.signal })
         if (!response.ok) throw new Error('Could not restore registration. Reload to try again.')
         const data: Verification = await response.json()
@@ -78,15 +88,55 @@ function App() {
     }
   }
 
+  async function registerPasskey() {
+    setBusy(true)
+    setError('')
+    try {
+      if (!window.isSecureContext || typeof PublicKeyCredential === 'undefined' ||
+          typeof PublicKeyCredential.parseCreationOptionsFromJSON !== 'function' ||
+          typeof PublicKeyCredential.prototype.toJSON !== 'function') {
+        throw new Error('This browser does not support Passkey registration here. Use a current Chrome or Chromium browser on localhost or HTTPS.')
+      }
+      const optionsResponse = await fetch('/api/registration/passkey/options', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      })
+      const options = await optionsResponse.json()
+      if (!optionsResponse.ok) throw new Error(options.error || 'Could not start Passkey registration.')
+      const publicKey = PublicKeyCredential.parseCreationOptionsFromJSON(options)
+      const credential = await navigator.credentials.create({ publicKey })
+      if (!(credential instanceof PublicKeyCredential)) throw new Error('No Passkey was created. Please try again.')
+      const response = await fetch('/api/registration/passkey/finish', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credential.toJSON()),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Could not complete registration.')
+      setAccount(result)
+      setVerification(null)
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'NotAllowedError') {
+        setError('Passkey registration was canceled or timed out. You can try again while your email verification is valid.')
+      } else {
+        setError(err instanceof Error ? err.message : 'Could not register the Passkey. Please try again.')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <main className="registration">
       <h1>Create an account</h1>
       {loading ? <p role="status">Loading…</p> : <>
-        {verified ? <section aria-label="Email verification complete">
+        {account.signedIn ? <section aria-label="Registration complete">
+          <h2>Account created</h2>
+          <p>You are signed in as {account.email}.</p>
+        </section> : verified ? <section aria-label="Email verification complete">
           <h2>Email verified</h2>
           <p>{verification?.email}</p>
           <p>Account setup is not complete. Your email verification is valid until{' '}
             {new Date(verification!.expiresAt!).toLocaleTimeString()}.</p>
+          <button type="button" disabled={busy} onClick={() => void registerPasskey()}>Register a Passkey</button>
         </section> : <>
           <form onSubmit={(event) => {
             event.preventDefault()

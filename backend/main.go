@@ -64,6 +64,12 @@ func main() {
 	mux := http.NewServeMux()
 	verification := newVerificationServer(db, sender, verificationCfg)
 	verification.routes(mux)
+	passkeys, err := newPasskeyServer(verification)
+	if err != nil {
+		log.Fatal(err)
+	}
+	passkeys.routes(mux)
+	verification.registeredEmail = passkeys.registeredEmail
 	go verification.runCleanup(context.Background())
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok\n"))

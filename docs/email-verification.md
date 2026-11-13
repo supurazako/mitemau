@@ -16,7 +16,7 @@ Send requests also have a configurable source-IP limit of 20 accepted messages p
 
 Expired state is deleted at API startup and hourly, in batches of up to 1,000 rows per table. Expiry is enforced on reads even before deletion. The cleanup interval is configurable.
 
-The HttpOnly cookie identifies registration state, not a login session. #16 must validate and consume the `verified_registrations` state and handle existing accounts and concurrent registration. The initial email policy supports ASCII addresses, preserving local-part case and lowercasing the domain.
+The HttpOnly cookie identifies registration state, not a login session. #16 validates and consumes the `verified_registrations` state and handles existing accounts and concurrent registration. The initial email policy supports ASCII addresses, preserving local-part case and lowercasing the domain.
 
 For public deployment, configure `APP_ORIGIN`, HTTPS cookies, and authenticated STARTTLS delivery. Public provider selection and delivery validation remain pending for M5. Distributed abuse and provider quotas still need review before public launch.
 
