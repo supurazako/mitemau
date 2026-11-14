@@ -2,7 +2,7 @@ name: moqtail-relay
 
 services:
   relay:
-    image: ghcr.io/moqtail/relay@sha256:7e5ee7f10ac1d6cf785be8a0964824c4b629ea8a9b6bf8387ab830d50e9eae36
+    image: ghcr.io/moqtail/relay@sha256:c68aa7f28ad51014b8f081386cc0d5bb0816f8ca8be2c98656d9a80d8ee93d21
     container_name: moqtail-relay
     pull_policy: never
     user: "65532:65532"

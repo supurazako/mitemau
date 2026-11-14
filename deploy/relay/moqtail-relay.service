@@ -1,5 +1,5 @@
 [Unit]
-Description=MOQtail draft-18 Relay (Docker Compose)
+Description=MOQtail draft-22 Relay (Docker Compose)
 Wants=network-online.target
 After=network-online.target docker.service
 Requires=docker.service
