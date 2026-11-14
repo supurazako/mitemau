@@ -18,6 +18,12 @@ type smtpSender struct {
 }
 
 func (s smtpSender) Send(ctx context.Context, to, code string) error {
+	return s.send(ctx, to, code, "Mitemau email verification")
+}
+func (s smtpSender) SendRecovery(ctx context.Context, to, code string) error {
+	return s.send(ctx, to, code, "Mitemau account recovery")
+}
+func (s smtpSender) send(ctx context.Context, to, code, subject string) error {
 	for _, address := range []string{s.From, to} {
 		parsed, err := mail.ParseAddress(address)
 		if err != nil || parsed.Address != address || strings.ContainsAny(address, "\r\n") {
@@ -68,7 +74,7 @@ func (s smtpSender) Send(ctx context.Context, to, code string) error {
 	if err != nil {
 		return err
 	}
-	message := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: Mitemau email verification\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nYour verification code is: %s\r\n\r\nThis code expires in %d minutes. If you did not request it, ignore this email.\r\n", s.From, to, code, int(s.CodeTTL.Minutes()))
+	message := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\nYour verification code is: %s\r\n\r\nThis code expires in %d minutes. If you did not request it, ignore this email.\r\n", s.From, to, subject, code, int(s.CodeTTL.Minutes()))
 	if _, err = data.Write([]byte(message)); err != nil {
 		return err
 	}

@@ -1,5 +1,7 @@
 import './App.css'
 import BackupPasskey from './BackupPasskey'
+import AccountRecovery from './AccountRecovery'
+import ReplaceRecoveryCodes, { RecoveryCodesDisplay } from './RecoveryCodes'
 import { useEffect, useState } from 'react'
 import { notifySessionChange, useSessionActivity } from './useSessionActivity'
 import type { AccountSession } from './useSessionActivity'
@@ -14,6 +16,7 @@ type Verification = {
 
 function App() {
   const [account, setAccount] = useState<AccountSession>({ signedIn: false })
+  const [issuedCodes, setIssuedCodes] = useState<{ email: string, codes: string[] } | null>(null)
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [verification, setVerification] = useState<Verification | null>(null)
@@ -139,7 +142,8 @@ function App() {
       })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Could not complete registration.')
-      setAccount(result)
+      setAccount({ signedIn: result.signedIn, email: result.email, expiresAt: result.expiresAt, renewAfterSeconds: result.renewAfterSeconds })
+      setIssuedCodes(result.recoveryCodes ? { email: result.email, codes: result.recoveryCodes } : null)
       setVerification(null)
       notifySessionChange()
     } catch (err) {
@@ -176,7 +180,8 @@ function App() {
       })
       const result = await finish.json()
       if (!finish.ok) throw new Error(result.error || 'Could not complete sign-in.')
-      setAccount(result)
+      setAccount({ signedIn: result.signedIn, email: result.email, expiresAt: result.expiresAt, renewAfterSeconds: result.renewAfterSeconds })
+      setIssuedCodes(result.recoveryCodes ? { email: result.email, codes: result.recoveryCodes } : null)
       setVerification(null)
       setNow(Date.now())
       notifySessionChange()
@@ -199,6 +204,7 @@ function App() {
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || 'Could not sign out. Please try again.')
       setAccount({ signedIn: false })
+      setIssuedCodes(null)
       setVerification(null)
       setEmail('')
       setCode('')
@@ -216,6 +222,8 @@ function App() {
           <h2>Signed in</h2>
           <p>You are signed in as {account.email}.</p>
           <button type="button" disabled={busy} onClick={() => void signOut()}>Sign out</button>
+          <RecoveryCodesDisplay codes={issuedCodes && issuedCodes.email === account.email ? issuedCodes.codes : []} onDismiss={() => setIssuedCodes(null)} />
+          <ReplaceRecoveryCodes key={'codes-' + account.email} busy={busy} onBusy={setBusy} onCodes={codes => setIssuedCodes({ email: account.email!, codes })} />
           <BackupPasskey key={account.email} busy={busy} onBusy={setBusy} />
         </section> : <>
         <section aria-label="Sign in">
@@ -223,6 +231,14 @@ function App() {
           {sessionExpired && <p role="status">Your session expired. Please sign in again.</p>}
           <button type="button" disabled={busy} onClick={() => void signIn()}>Sign in with a Passkey</button>
         </section>
+        <AccountRecovery busy={busy} onBusy={setBusy} onRecovered={(result, codes) => {
+          setAccount(result)
+          setIssuedCodes({ email: result.email!, codes })
+          setVerification(null)
+          setError('')
+          setNow(Date.now())
+          notifySessionChange()
+        }} />
         <h2>Create an account</h2>
         {verified ? <section aria-label="Email verification complete">
           <h2>Email verified</h2>
