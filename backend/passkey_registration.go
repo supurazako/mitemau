@@ -76,6 +76,7 @@ func newPasskeyServer(v *verificationServer) (*passkeyServer, error) {
 	return &passkeyServer{verification: v, wa: wa, challengeTTL: challengeTTL, sessionTTL: sessionTTL, sessionAbsoluteTTL: absoluteTTL}, nil
 }
 func (p *passkeyServer) routes(mux *http.ServeMux) {
+	p.recoveryRoutes(mux)
 	mux.HandleFunc("POST /registration/passkey/options", p.verification.protect(p.begin))
 	mux.HandleFunc("POST /registration/passkey/finish", p.verification.protect(p.finish))
 	mux.HandleFunc("GET /session", p.session)
@@ -262,13 +263,18 @@ func (p *passkeyServer) finish(w http.ResponseWriter, r *http.Request) {
 		problem(w, 503, "Registration is temporarily unavailable")
 		return
 	}
+	codes, err := replaceRecoveryCodes(r.Context(), tx, user.ID)
+	if err != nil {
+		problem(w, 503, "Could not issue recovery codes")
+		return
+	}
 	if err = tx.Commit(); err != nil {
 		problem(w, 503, "Could not complete registration. Check your account status before retrying")
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: newSession, Path: "/", MaxAge: int(p.sessionTTL.Seconds()), HttpOnly: true, Secure: p.verification.config.SecureCookie, SameSite: http.SameSiteStrictMode})
 	http.SetCookie(w, &http.Cookie{Name: registrationCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: p.verification.config.SecureCookie, SameSite: http.SameSiteStrictMode})
-	writeJSON(w, 201, map[string]any{"email": user.Email, "signedIn": true, "expiresAt": sessionExpires, "renewAfterSeconds": p.renewAfterSeconds()})
+	writeJSON(w, 201, map[string]any{"email": user.Email, "signedIn": true, "expiresAt": sessionExpires, "renewAfterSeconds": p.renewAfterSeconds(), "recoveryCodes": codes})
 }
 func (p *passkeyServer) session(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(sessionCookie)

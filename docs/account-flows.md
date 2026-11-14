@@ -52,18 +52,18 @@
 7. The site issues replacement offline recovery codes and displays them for copying or saving.
 
 - Email access alone cannot authorize recovery.
+- Ten 128-bit offline codes are shown once after setup and recovery; only hashes are stored. All old codes are invalidated when a replacement set is issued.
+- Signed-in users can obtain replacement codes after fresh Passkey verification. See [account recovery](account-recovery.md) for limits and retry behavior.
 - Missing or invalid recovery codes are rejected.
 - Expired or reused email verification codes are rejected.
 - Existing Passkeys and sessions are invalidated only after recovery succeeds.
 
 ## Failure cases and unresolved decisions
 
-- Define expiration times for recovery states and WebAuthn challenges.
-- Define code formats, attempt limits, and resend limits for recovery.
+- Recovery email uses the configured 10-minute/five-attempt/60-second defaults. Verified recovery lasts 30 minutes, with five-minute enrollment challenges capped by the grant.
 - Sessions use opaque HttpOnly, SameSite=Strict cookies (Secure in HTTPS deployments). Mutations require JSON and validate the configured origin; session status reads never renew sessions.
 - Registration resumes using an opaque HttpOnly cookie linked to server-side verification state; Passkey enrollment must validate and consume that state.
-- Define how recovery resumes after cancellation or failure without consuming an offline recovery code prematurely.
-- Define whether issuing replacement offline recovery codes invalidates all previously issued codes.
+- Failed/canceled Passkey enrollment can retry within verified recovery; offline codes are consumed only when recovery succeeds.
 - Email resends replace pending codes but do not revoke already verified registration states in other browsers.
-- Define how concurrent account creation and recovery attempts are handled.
+- Account uniqueness is enforced by the database; account locks serialize recovery with login and credential changes. Successful recovery invalidates competing recovery grants.
 - Production email delivery remains to be selected; local SMTP uses Mailpit.

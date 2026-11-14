@@ -21,4 +21,4 @@ Stop the backend, run `make migrate-up`, then restart `make backend`; run `make 
 
 MySQL integration tests cover real signed assertions, invalid responses, expired/replayed challenges, concurrent completion, session rotation, logout isolation, renewal deadlines, and cross-origin requests. Run `MYSQL_TEST_DSN=... go test -race ./...` only against a disposable migrated database; also run `go vet ./...`, frontend build and lint.
 
-Automated browser checks use Chrome for Testing 158.0.8127.18 with a virtual CTAP2.1 authenticator. Real-device sign-in and logout remain a manual review step. Recovery is separate work; see [Backup Passkeys](backup-passkeys.md) for additional credential enrollment.
+Automated browser checks use Chrome for Testing 158.0.8127.18 with a virtual CTAP2.1 authenticator. Real-device sign-in and logout remain a manual review step. See [Account recovery](account-recovery.md) for recovery with offline and email codes; see [Backup Passkeys](backup-passkeys.md) for additional credential enrollment.
