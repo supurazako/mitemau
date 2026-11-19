@@ -1,10 +1,13 @@
 import { useRef, useState, useEffect } from "react";
 import { startCamera, stopCamera } from "./lib/camera";
+import { startVideoEncoding } from "./lib/videoEncoding";
+import type { VideoEncodingSession } from "./lib/videoEncoding";
 
 export default function CameraPreview() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(false);
+  const encodingRef = useRef<VideoEncodingSession | null>(null);
 
   const [status, setStatus] = useState("Stopped");
 
@@ -13,6 +16,10 @@ export default function CameraPreview() {
 
     return () => {
       mountedRef.current = false;
+
+      const session = encodingRef.current;
+      encodingRef.current = null;
+      void session?.stop().catch(console.error);
 
       if (streamRef.current) {
         stopCamera(streamRef.current);
@@ -36,25 +43,45 @@ export default function CameraPreview() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
+      const session = startVideoEncoding(stream);
+      encodingRef.current = session;
+
+      void session.done.catch((error) => {
+        console.error("Encoding failed", error);
+
+        if (encodingRef.current === session) {
+          void stop();
+        }
+      });
       setStatus("Running");
     } catch (error) {
       console.error(error);
-      if (mountedRef.current) {
-        setStatus("Stopped");
-      }
+      await stop();
     }
   }
 
-  function stop() {
-    if (streamRef.current) {
-      stopCamera(streamRef.current);
-      streamRef.current = null;
-    }
+  async function stop() {
+    if (mountedRef.current) setStatus("Stopping");
 
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
+    const session = encodingRef.current;
+    encodingRef.current = null;
+
+    try {
+      await session?.stop();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      if (streamRef.current) {
+        stopCamera(streamRef.current);
+        streamRef.current = null;
+      }
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+
+      if (mountedRef.current) setStatus("Stopped");
     }
-    setStatus("Stopped");
   }
 
   return (
