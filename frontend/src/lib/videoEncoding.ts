@@ -9,6 +9,7 @@ export type VideoEncodingSession = {
 export function startVideoEncoding(
   stream: MediaStream,
   onOutput: EncodedVideoChunkOutputCallback,
+  onCapture: (timestamp: number) => void,
 ): VideoEncodingSession {
   const encoder = createVideoEncoder(onOutput);
 
@@ -30,7 +31,7 @@ export function startVideoEncoding(
 
   const done = (async () => {
     try {
-      await encodeVideoFrames(reader, encoder);
+      await encodeVideoFrames(reader, encoder, onCapture);
       await encoder.flush();
     } finally {
       try {

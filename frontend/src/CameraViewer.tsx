@@ -1,6 +1,9 @@
 import { FullTrackName } from "moqtail";
 import { useEffect, useRef, useState } from "react";
 import { connectRelay, TEST_RELAY_URL } from "./lib/moq";
+import { createAudioPlayback } from "./lib/audioPlayback";
+import { createPlaybackTimeline } from "./lib/mediaTiming";
+import { createWatchLifecycle } from "./lib/watchLifecycle";
 import { createCameraDecoder } from "./lib/videoDecoder";
 
 export default function CameraViewer() {
@@ -18,57 +21,78 @@ export default function CameraViewer() {
 
     setWatching(true);
     setStatus("Connecting");
-    let stopped = false;
     let cleanup: (() => void) | undefined;
-    const finish = (status: string) => {
-      if (stopped) return;
-      stop();
-      setWatching(false);
-      setStatus(status);
-    };
-    function stop() {
-      if (stopped) return;
-      stopped = true;
-      stopRef.current = null;
-      cleanup?.();
-    }
-    stopRef.current = stop;
+    const lifecycle = createWatchLifecycle(
+      () => {
+        stopRef.current = null;
+        cleanup?.();
+      },
+      setStatus,
+      () => setWatching(false),
+    );
+    stopRef.current = lifecycle.stop;
 
     try {
       const name = FullTrackName.tryNew(namespace.trim(), "camera");
-      const relay = connectRelay(TEST_RELAY_URL, () => finish("Disconnected"));
+      const context = new AudioContext();
+      const timeline = createPlaybackTimeline(context);
+      cleanup = () => { void context.close().catch(console.error); };
+      await context.resume();
+      if (lifecycle.stopped) return;
+      const relay = connectRelay(TEST_RELAY_URL, () => lifecycle.finish("Disconnected"));
       let decoder: ReturnType<typeof createCameraDecoder> | undefined;
+      let audio: ReturnType<typeof createAudioPlayback> | undefined;
+      let unsubscribeAudio: (() => Promise<void>) | undefined;
       let unsubscribe: (() => Promise<void>) | undefined;
       cleanup = () => {
         decoder?.close();
+        audio?.stop();
+        void context.close().catch(console.error);
         void (async () => {
           try {
-            await unsubscribe?.();
+            await Promise.allSettled([unsubscribe?.(), unsubscribeAudio?.()]);
           } finally {
             await relay.disconnect();
           }
         })().catch(console.error);
       };
       await relay.ready;
-      if (stopped) return;
-      const subscription = await relay.subscribeVideo(name);
-      if (stopped) return;
+      if (lifecycle.stopped) return;
+      const subscription = await relay.subscribeMedia(name);
+      if (lifecycle.stopped) return;
 
       unsubscribe = subscription.unsubscribe;
+      const audioName = FullTrackName.tryNew(namespace.trim(), "audio");
+      void (async () => {
+        const subscription = await relay.subscribeMedia(audioName);
+        if (lifecycle.stopped) return;
+        unsubscribeAudio = subscription.unsubscribe;
+        audio = createAudioPlayback(context, timeline, (error) => {
+          console.error("Microphone playback failed", error);
+          lifecycle.finish("Could not play audio");
+        });
+        await audio.play(subscription.stream);
+        unsubscribeAudio = undefined;
+        lifecycle.trackEnded("audio");
+      })().catch((error) => {
+        console.error("Microphone subscription failed", error);
+        lifecycle.finish("Could not play audio");
+      });
       setStatus("Waiting for a keyframe");
       decoder = createCameraDecoder(
         canvas,
-        () => setStatus("Playing"),
+        timeline,
+        lifecycle.frameDisplayed,
         (error) => {
           console.error("Camera decode failed", error);
-          finish("Decoding failed");
+          lifecycle.finish("Decoding failed");
         },
       );
       const reader = subscription.stream.getReader();
       try {
-        while (!stopped) {
+        while (!lifecycle.stopped) {
           const { value, done } = await reader.read();
-          if (stopped) return;
+          if (lifecycle.stopped) return;
           if (done) {
             unsubscribe = undefined;
             break;
@@ -79,12 +103,12 @@ export default function CameraViewer() {
         reader.releaseLock();
       }
 
-      if (stopped) return;
-      await decoder.flush();
-      finish("Stream ended");
+      if (lifecycle.stopped) return;
+      await decoder.drain();
+      lifecycle.trackEnded("video");
     } catch (error) {
       console.error("Camera subscription failed", error);
-      finish("Could not play stream");
+      lifecycle.finish("Could not play stream");
     }
   }
 

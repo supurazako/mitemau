@@ -13,7 +13,8 @@ export function createVideoObjectBuilder(track: FullTrackName) {
 
   return (
     chunk: EncodedVideoChunk,
-    metadata?: EncodedVideoChunkMetadata,
+    metadata: EncodedVideoChunkMetadata | undefined,
+    timestamp: number,
   ): MoqtObject | undefined => {
     const description = metadata?.decoderConfig?.description;
     if (description) {
@@ -36,7 +37,7 @@ export function createVideoObjectBuilder(track: FullTrackName) {
     }
 
     const properties = new LOCProperties()
-      .addTimestamp(chunk.timestamp)
+      .addTimestamp(timestamp)
       .addVideoFrameMarking(isKey);
     if (isKey && videoConfig) {
       properties.addVideoConfig(videoConfig);

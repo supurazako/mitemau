@@ -1,9 +1,9 @@
 export {};
 
 declare global {
-  class MediaStreamTrackProcessor {
+  class MediaStreamTrackProcessor<Frame extends VideoFrame | AudioData = VideoFrame> {
     constructor(options: { track: MediaStreamTrack; maxBufferSize?: number });
 
-    readonly readable: ReadableStream<VideoFrame>;
+    readonly readable: ReadableStream<Frame>;
   }
 }

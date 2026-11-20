@@ -2,8 +2,11 @@ import { FullTrackName } from "moqtail";
 import { useRef, useState, useEffect } from "react";
 import { startCamera, stopCamera } from "./lib/camera";
 import { startVideoEncoding } from "./lib/videoEncoding";
-import type { RelaySession, VideoPublication } from "./lib/moq";
+import type { RelaySession, MediaPublication } from "./lib/moq";
 import type { VideoEncodingSession } from "./lib/videoEncoding";
+import { startAudioEncoding } from "./lib/audioEncoding";
+import { createAudioObjectBuilder } from "./lib/audioObjects";
+import { createCaptureTimeline } from "./lib/mediaTiming";
 import { createVideoObjectBuilder } from "./lib/videoObjects";
 
 const previewTrack = FullTrackName.tryNew("mitemau/preview", "camera");
@@ -14,7 +17,9 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
   const mountedRef = useRef(false);
   const encodingRef = useRef<VideoEncodingSession | null>(null);
 
-  const publicationRef = useRef<VideoPublication | null>(null);
+  const audioRef = useRef<ReturnType<typeof startAudioEncoding> | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const publicationRef = useRef<MediaPublication | null>(null);
   const [trackNamespace, setTrackNamespace] = useState<string | null>(null);
 
   const [status, setStatus] = useState("Stopped");
@@ -28,6 +33,10 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
       const session = encodingRef.current;
       encodingRef.current = null;
       void session?.stop().catch(console.error);
+
+      const audio = audioRef.current;
+      audioRef.current = null;
+      void audio?.stop().catch(console.error);
 
       const publication = publicationRef.current;
       publicationRef.current = null;
@@ -43,8 +52,9 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
   async function start() {
     if (status !== "Stopped") return;
     setStatus("Starting");
+    setCaptureError(null);
     try {
-      const stream = await startCamera();
+      const stream = await startCamera(relay !== null);
       if (!mountedRef.current) {
         stopCamera(stream);
         return;
@@ -59,7 +69,8 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
       const track = namespace
         ? FullTrackName.tryNew(namespace, "camera")
         : previewTrack;
-      const publication = relay?.publishVideo(track);
+      const audioTrack = namespace && FullTrackName.tryNew(namespace, "audio");
+      const publication = relay && audioTrack ? relay.publishMedia([track, audioTrack]) : null;
       if (publication) {
         publicationRef.current = publication;
         await publication.ready;
@@ -67,9 +78,10 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
         setTrackNamespace(namespace);
       }
 
+      const videoTime = createCaptureTimeline();
       const buildObject = createVideoObjectBuilder(track);
       const session = startVideoEncoding(stream, (chunk, metadata) => {
-        const object = buildObject(chunk, metadata);
+        const object = buildObject(chunk, metadata, videoTime.translate(chunk.timestamp));
         if (object) {
           publication?.write(object);
           console.debug("Camera MoQ Object", {
@@ -79,8 +91,26 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
             bytes: object.payload?.byteLength,
           });
         }
-      });
+      }, videoTime.observe);
       encodingRef.current = session;
+
+      if (publication && audioTrack) {
+        const microphone = stream.getAudioTracks()[0];
+        if (!microphone) throw new Error("Microphone track missing");
+        const audioTime = createCaptureTimeline();
+        const buildAudioObject = createAudioObjectBuilder(audioTrack);
+        const audio = startAudioEncoding(microphone, (chunk) => {
+          publication.write(buildAudioObject(chunk, audioTime.translate(chunk.timestamp)));
+        }, audioTime.observe);
+        audioRef.current = audio;
+        void audio.done.catch((error) => {
+          console.error("Microphone encoding failed", error);
+          if (audioRef.current === audio) {
+            setCaptureError("Microphone encoding failed.");
+            void stop();
+          }
+        });
+      }
 
       void session.done.catch((error) => {
         console.error("Encoding failed", error);
@@ -92,6 +122,11 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
       setStatus("Running");
     } catch (error) {
       console.error(error);
+      if (mountedRef.current) {
+        setCaptureError(error instanceof DOMException && error.name === "NotAllowedError"
+          ? "Camera or microphone permission was denied."
+          : "Could not start media capture or publishing.");
+      }
       await stop();
     }
   }
@@ -102,10 +137,13 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
     const session = encodingRef.current;
     encodingRef.current = null;
 
+    const audio = audioRef.current;
+    audioRef.current = null;
     try {
-      await session?.stop();
-    } catch (error) {
-      console.error(error);
+      const results = await Promise.allSettled([session?.stop(), audio?.stop()]);
+      for (const result of results) {
+        if (result.status === "rejected") console.error(result.reason);
+      }
     } finally {
       if (streamRef.current) {
         stopCamera(streamRef.current);
@@ -135,6 +173,7 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
     <section>
       <h2>Camera preview</h2>
       <p role="status">{status}</p>
+      {captureError && <p role="alert">{captureError}</p>}
       {trackNamespace && <p>Publishing camera to {trackNamespace}</p>}
       <video ref={videoRef} autoPlay muted playsInline />
       <button
