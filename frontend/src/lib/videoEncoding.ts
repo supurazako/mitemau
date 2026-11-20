@@ -6,8 +6,11 @@ export type VideoEncodingSession = {
   stop: () => Promise<void>;
 };
 
-export function startVideoEncoding(stream: MediaStream): VideoEncodingSession {
-  const encoder = createVideoEncoder();
+export function startVideoEncoding(
+  stream: MediaStream,
+  onOutput: EncodedVideoChunkOutputCallback,
+): VideoEncodingSession {
+  const encoder = createVideoEncoder(onOutput);
 
   let reader: ReadableStreamDefaultReader<VideoFrame>;
 

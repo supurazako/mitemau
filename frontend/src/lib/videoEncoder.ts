@@ -1,19 +1,17 @@
-export function createVideoEncoder(): VideoEncoder {
+export const CAMERA_VIDEO_CODEC = "avc1.42E01F";
+
+export function createVideoEncoder(
+  onOutput: EncodedVideoChunkOutputCallback,
+): VideoEncoder {
   const encoder = new VideoEncoder({
-    output(chunk) {
-      console.log({
-        type: chunk.type,
-        bytes: chunk.byteLength,
-        timestamp: chunk.timestamp,
-      });
-    },
+    output: onOutput,
     error(error) {
       console.error("Video encoding failed", error);
     },
   });
 
   encoder.configure({
-    codec: "avc1.42E01F",
+    codec: CAMERA_VIDEO_CODEC,
     width: 640,
     height: 360,
     bitrate: 300_000,

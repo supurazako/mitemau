@@ -1,9 +1,11 @@
+import CameraPreview from "./CameraPreview";
 import { useRef, useEffect, useState } from "react";
 import type { RelaySession } from "./lib/moq";
-import { connectRelay } from "./lib/moq";
+import { connectRelay, TEST_RELAY_URL } from "./lib/moq";
 
 export default function RelayConnection() {
   const clientRef = useRef<RelaySession | null>(null);
+  const [connectedRelay, setConnectedRelay] = useState<RelaySession | null>(null);
   const [status, setStatus] = useState("Disconnected");
 
   useEffect(() => {
@@ -21,10 +23,11 @@ export default function RelayConnection() {
       let ended = false;
 
       const session = connectRelay(
-        "https://relay-test.supurazako.com:4433",
+        TEST_RELAY_URL,
         () => {
           ended = true;
           clientRef.current = null;
+          setConnectedRelay(null);
           setStatus("Disconnected");
         },
       );
@@ -34,6 +37,7 @@ export default function RelayConnection() {
 
       if (ended) return;
 
+      setConnectedRelay(session);
       setStatus("Connected");
     } catch (error) {
       console.error(error);
@@ -44,27 +48,34 @@ export default function RelayConnection() {
   async function disconnect() {
     await clientRef.current?.disconnect();
     clientRef.current = null;
+    setConnectedRelay(null);
     setStatus("Disconnected");
   }
 
   return (
-    <section>
-      <h2>Relay connection</h2>
-      <p role="status">{status}</p>
-      <button
-        type="button"
-        disabled={status === "Connecting" || status === "Connected"}
-        onClick={() => void connect()}
-      >
-        Connect
-      </button>
-      <button
-        type="button"
-        disabled={status !== "Connected"}
-        onClick={() => void disconnect()}
-      >
-        Disconnect
-      </button>
-    </section>
+    <>
+      <section>
+        <h2>Relay connection</h2>
+        <p role="status">{status}</p>
+        <button
+          type="button"
+          disabled={status === "Connecting" || status === "Connected"}
+          onClick={() => void connect()}
+        >
+          Connect
+        </button>
+        <button
+          type="button"
+          disabled={status !== "Connected"}
+          onClick={() => void disconnect()}
+        >
+          Disconnect
+        </button>
+      </section>
+      <CameraPreview
+        key={connectedRelay ? "connected" : "offline"}
+        relay={connectedRelay}
+      />
+    </>
   );
 }
