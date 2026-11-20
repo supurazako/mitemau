@@ -4,7 +4,7 @@ import { LiveTrackSource, MOQtailClient } from "moqtail/client";
 
 export const TEST_RELAY_URL = "https://relay-test.supurazako.com:4433";
 
-export type VideoPublication = {
+export type MediaPublication = {
   ready: Promise<void>;
   write: (object: MoqtObject) => void;
   stop: () => Promise<void>;
@@ -12,11 +12,11 @@ export type VideoPublication = {
 
 export type RelaySession = {
   ready: Promise<void>;
-  subscribeVideo: (name: FullTrackName) => Promise<{
+  subscribeMedia: (name: FullTrackName) => Promise<{
     stream: ReadableStream<MoqtObject>;
     unsubscribe: () => Promise<void>;
   }>;
-  publishVideo: (name: FullTrackName) => VideoPublication;
+  publishMedia: (names: readonly [FullTrackName, ...FullTrackName[]]) => MediaPublication;
   disconnect: () => Promise<void>;
 };
 
@@ -29,7 +29,7 @@ export function connectRelay(
 
   return {
     ready: client.init(),
-    async subscribeVideo(name) {
+    async subscribeMedia(name) {
       const result = await client.subscribe({
         fullTrackName: name,
         groupOrder: GroupOrder.Original,
@@ -38,50 +38,60 @@ export function connectRelay(
         priority: 0,
       });
       if (result instanceof RequestError) {
-        throw new Error("Relay rejected the camera subscription");
+        throw new Error("Relay rejected the media subscription");
       }
       return {
         stream: result.stream,
         unsubscribe: () => client.unsubscribe(result.requestId),
       };
     },
-    publishVideo(name) {
-      let controller: ReadableStreamDefaultController<MoqtObject> | undefined;
-      const stream = new ReadableStream<MoqtObject>({
-        start(value) {
-          controller = value;
-        },
-        cancel() {
-          controller = undefined;
-        },
-      });
-      const track = {
-        fullTrackName: name,
-        trackSource: { live: new LiveTrackSource(stream) },
-        publisherPriority: 128,
-      };
-      client.addOrUpdateTrack(track);
+    publishMedia(names) {
+      const sources = new Map(names.map((name) => {
+        let controller: ReadableStreamDefaultController<MoqtObject> | undefined;
+        const stream = new ReadableStream<MoqtObject>({
+          start(value) {
+            controller = value;
+          },
+          cancel() {
+            controller = undefined;
+          },
+        });
+        const track = {
+          fullTrackName: name,
+          trackSource: { live: new LiveTrackSource(stream) },
+          publisherPriority: 128,
+        };
+        client.addOrUpdateTrack(track);
+        return [name, {
+          track,
+          write: (object: MoqtObject) => controller?.enqueue(object),
+          close() {
+            controller?.close();
+            controller = undefined;
+          },
+        }];
+      }));
 
-      const ready = client.publishNamespace(name.namespace).then((result) => {
+      const namespace = names[0].namespace;
+      const ready = client.publishNamespace(namespace).then((result) => {
         if (result instanceof RequestError) {
-          throw new Error("Relay rejected the camera namespace");
+          throw new Error("Relay rejected the media namespace");
         }
       });
 
       let stopping: Promise<void> | undefined;
       return {
         ready,
-        write: (object) => controller?.enqueue(object),
+        write: (object) => sources.get(object.fullTrackName)?.write(object),
         stop() {
           if (!stopping) {
-            controller?.close();
-            controller = undefined;
+            for (const source of sources.values()) source.close();
             stopping = (async () => {
               try {
                 await ready;
-                await client.unpublishNamespace(name.namespace);
+                await client.unpublishNamespace(namespace);
               } finally {
-                client.removeTrack(track);
+                for (const source of sources.values()) client.removeTrack(source.track);
               }
             })();
           }

@@ -1,7 +1,7 @@
-export async function startCamera(): Promise<MediaStream> {
+export async function startCamera(withMicrophone = false): Promise<MediaStream> {
   return navigator.mediaDevices.getUserMedia({
     video: true,
-    audio: false,
+    audio: withMicrophone ? { sampleRate: 48000, channelCount: 1 } : false,
   });
 }
 
