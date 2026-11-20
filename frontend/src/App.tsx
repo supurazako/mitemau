@@ -3,6 +3,7 @@ import BackupPasskey from "./BackupPasskey";
 import AccountRecovery from "./AccountRecovery";
 import ReplaceRecoveryCodes, { RecoveryCodesDisplay } from "./RecoveryCodes";
 import RelayConnection from "./RelayConnection";
+import CameraViewer from "./CameraViewer";
 import { useEffect, useState } from "react";
 import { notifySessionChange, useSessionActivity } from "./useSessionActivity";
 import type { AccountSession } from "./useSessionActivity";
@@ -325,6 +326,7 @@ function App() {
   return (
     <main className="registration">
       <RelayConnection />
+      <CameraViewer />
       <h1>Mitemau</h1>
       {loading ? (
         <p role="status">Loading…</p>
