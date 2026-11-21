@@ -12,7 +12,7 @@ export default function RelayConnection() {
     return () => {
       const client = clientRef.current;
       clientRef.current = null;
-      void client?.disconnect();
+      void client?.disconnect().catch(console.error);
     };
   }, []);
 
@@ -46,10 +46,17 @@ export default function RelayConnection() {
   }
 
   async function disconnect() {
-    await clientRef.current?.disconnect();
+    setStatus("Disconnecting");
+    const session = clientRef.current;
     clientRef.current = null;
     setConnectedRelay(null);
-    setStatus("Disconnected");
+    try {
+      await session?.disconnect();
+      setStatus("Disconnected");
+    } catch (error) {
+      console.error("Relay disconnect failed", error);
+      setStatus("Failed");
+    }
   }
 
   return (
@@ -59,7 +66,7 @@ export default function RelayConnection() {
         <p role="status">{status}</p>
         <button
           type="button"
-          disabled={status === "Connecting" || status === "Connected"}
+          disabled={status === "Connecting" || status === "Connected" || status === "Disconnecting"}
           onClick={() => void connect()}
         >
           Connect

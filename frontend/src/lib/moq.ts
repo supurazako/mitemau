@@ -26,7 +26,11 @@ export function connectRelay(
   onDisconnected: () => void,
 ): RelaySession {
   const client = new MOQtailClient({ url });
-  client.on("sessionterminated", onDisconnected);
+  let closed = false;
+  client.on("sessionterminated", () => {
+    closed = true;
+    onDisconnected();
+  });
 
   return {
     ready: client.init(),
@@ -73,7 +77,7 @@ export function connectRelay(
             controller?.close();
             controller = undefined;
           },
-          remove: () => client.removeTrack(track),
+          remove: () => { if (!closed) client.removeTrack(track); },
         };
       }
 
@@ -116,7 +120,7 @@ export function connectRelay(
             stopping = (async () => {
               try {
                 await ready;
-                await client.unpublishNamespace(namespace);
+                if (!closed) await client.unpublishNamespace(namespace);
               } finally {
                 for (const source of sources.values()) source.remove();
                 sources.clear();
@@ -127,6 +131,10 @@ export function connectRelay(
         },
       };
     },
-    disconnect: () => client.disconnect(),
+    async disconnect() {
+      if (closed) return;
+      closed = true;
+      await client.disconnect();
+    },
   };
 }
