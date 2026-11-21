@@ -1,3 +1,6 @@
+import ScreenViewer from "./ScreenViewer";
+import type { RelaySession } from "./lib/moq";
+import type { PlaybackTimeline } from "./lib/mediaTiming";
 import { FullTrackName } from "moqtail";
 import { useEffect, useRef, useState } from "react";
 import { connectRelay, TEST_RELAY_URL } from "./lib/moq";
@@ -11,6 +14,11 @@ export default function CameraViewer() {
   const stopRef = useRef<(() => void) | null>(null);
   const [namespace, setNamespace] = useState("");
   const [status, setStatus] = useState("Stopped");
+  const [screenSession, setScreenSession] = useState<{
+    relay: RelaySession;
+    namespace: string;
+    timeline: PlaybackTimeline;
+  } | null>(null);
   const [watching, setWatching] = useState(false);
 
   useEffect(() => () => stopRef.current?.(), []);
@@ -28,7 +36,7 @@ export default function CameraViewer() {
         cleanup?.();
       },
       setStatus,
-      () => setWatching(false),
+      () => { setWatching(false); setScreenSession(null); },
     );
     stopRef.current = lifecycle.stop;
 
@@ -58,6 +66,7 @@ export default function CameraViewer() {
       };
       await relay.ready;
       if (lifecycle.stopped) return;
+      setScreenSession({ relay, namespace: namespace.trim(), timeline });
       const subscription = await relay.subscribeMedia(name);
       if (lifecycle.stopped) return;
 
@@ -127,12 +136,14 @@ export default function CameraViewer() {
         <button disabled={watching}>Watch</button>
         <button type="button" disabled={!watching} onClick={() => {
           stopRef.current?.();
+          setScreenSession(null);
           setWatching(false);
           setStatus("Stopped");
         }}>Stop watching</button>
       </form>
       <p role="status">{status}</p>
       <canvas ref={canvasRef} aria-label="Remote camera video" />
+      {screenSession && <ScreenViewer {...screenSession} />}
     </section>
   );
 }

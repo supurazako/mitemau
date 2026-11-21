@@ -6,6 +6,7 @@ export const TEST_RELAY_URL = "https://relay-test.supurazako.com:4433";
 
 export type MediaPublication = {
   ready: Promise<void>;
+  addTrack: (name: FullTrackName) => { stop: () => void };
   write: (object: MoqtObject) => void;
   stop: () => Promise<void>;
 };
@@ -46,7 +47,11 @@ export function connectRelay(
       };
     },
     publishMedia(names) {
-      const sources = new Map(names.map((name) => {
+      const namespace = names[0].namespace;
+      const sources = new Map<string, ReturnType<typeof registerTrack>>();
+      let stopping: Promise<void> | undefined;
+
+      function registerTrack(name: FullTrackName) {
         let controller: ReadableStreamDefaultController<MoqtObject> | undefined;
         const stream = new ReadableStream<MoqtObject>({
           start(value) {
@@ -62,27 +67,49 @@ export function connectRelay(
           publisherPriority: 128,
         };
         client.addOrUpdateTrack(track);
-        return [name, {
-          track,
+        return {
           write: (object: MoqtObject) => controller?.enqueue(object),
           close() {
             controller?.close();
             controller = undefined;
           },
-        }];
-      }));
+          remove: () => client.removeTrack(track),
+        };
+      }
 
-      const namespace = names[0].namespace;
+      function addTrack(name: FullTrackName) {
+        if (stopping) throw new Error("Media publication has stopped");
+        if (!name.namespace.equals(namespace)) {
+          throw new Error("Track must belong to the published namespace");
+        }
+        const key = name.toString();
+        if (sources.has(key)) {
+          throw new Error("Track is already registered");
+        }
+        const source = registerTrack(name);
+        sources.set(key, source);
+        return {
+          stop() {
+            if (sources.get(key) !== source) return;
+            sources.delete(key);
+            source.close();
+            source.remove();
+          },
+        };
+      }
+
+      for (const name of names) addTrack(name);
+
       const ready = client.publishNamespace(namespace).then((result) => {
         if (result instanceof RequestError) {
           throw new Error("Relay rejected the media namespace");
         }
       });
 
-      let stopping: Promise<void> | undefined;
       return {
         ready,
-        write: (object) => sources.get(object.fullTrackName)?.write(object),
+        addTrack,
+        write: (object) => sources.get(object.fullTrackName.toString())?.write(object),
         stop() {
           if (!stopping) {
             for (const source of sources.values()) source.close();
@@ -91,7 +118,8 @@ export function connectRelay(
                 await ready;
                 await client.unpublishNamespace(namespace);
               } finally {
-                for (const source of sources.values()) client.removeTrack(source.track);
+                for (const source of sources.values()) source.remove();
+                sources.clear();
               }
             })();
           }
