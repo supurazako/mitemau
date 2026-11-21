@@ -69,6 +69,11 @@ func main() {
 		log.Fatal(err)
 	}
 	passkeys.routes(mux)
+	staffIDs, err := parseStaffIDs(os.Getenv("STAFF_ACCOUNT_IDS"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	(&broadcasterServer{p: passkeys, staffIDs: staffIDs}).routes(mux)
 	verification.registeredEmail = passkeys.registeredEmail
 	go verification.runCleanup(context.Background())
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {

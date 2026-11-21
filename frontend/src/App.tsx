@@ -1,4 +1,5 @@
 import "./App.css";
+import BroadcasterApplication from "./BroadcasterApplication";
 import BackupPasskey from "./BackupPasskey";
 import AccountRecovery from "./AccountRecovery";
 import ReplaceRecoveryCodes, { RecoveryCodesDisplay } from "./RecoveryCodes";
@@ -325,6 +326,7 @@ function App() {
 
   return (
     <main className="registration">
+      {signedIn && <BroadcasterApplication key={account.email} />}
       <RelayConnection />
       <CameraViewer />
       <h1>Mitemau</h1>
