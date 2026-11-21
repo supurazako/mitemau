@@ -1,9 +1,10 @@
 import { FullTrackName } from "moqtail";
 import type { Track } from "moqtail/client";
-import { expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import { connectRelay } from "../src/lib/moq";
 
 const relay = vi.hoisted(() => ({
+  disconnect: vi.fn(async () => {}),
   init: vi.fn(async () => {}),
   on: vi.fn(),
   addOrUpdateTrack: vi.fn<(track: Track) => void>(),
@@ -16,6 +17,8 @@ vi.mock("moqtail/client", async (importOriginal) => ({
   ...await importOriginal<typeof import("moqtail/client")>(),
   MOQtailClient: class { constructor() { return relay; } },
 }));
+
+beforeEach(() => vi.clearAllMocks());
 
 test("stopping a dynamically added track leaves the namespace and other tracks live", async () => {
   const session = connectRelay("https://relay.example", () => {});
@@ -56,4 +59,25 @@ test("stopping a dynamically added track leaves the namespace and other tracks l
   });
   expect(relay.unpublishNamespace).toHaveBeenCalledOnce();
   expect(relay.removeTrack.mock.calls).toEqual([[screenTrack], [restartedTrack], [cameraTrack], [audioTrack]]);
+});
+
+
+test("screen cleanup after disconnect never calls a destroyed client", async () => {
+  const session = connectRelay("https://relay.example", () => {});
+  await session.ready;
+  const publication = session.publishMedia([FullTrackName.tryNew("test/disconnect", "camera")]);
+  await publication.ready;
+  const screen = publication.addTrack(FullTrackName.tryNew("test/disconnect", "screen"));
+  await session.disconnect();
+  relay.removeTrack.mockImplementation(() => { throw new Error("Client destroyed"); });
+  relay.unpublishNamespace.mockImplementation(async () => { throw new Error("Client destroyed"); });
+  try {
+    expect(() => screen.stop()).not.toThrow();
+    await expect(publication.stop()).resolves.toBeUndefined();
+    expect(relay.removeTrack).not.toHaveBeenCalled();
+    expect(relay.unpublishNamespace).not.toHaveBeenCalled();
+  } finally {
+    relay.removeTrack.mockReset();
+    relay.unpublishNamespace.mockReset();
+  }
 });
