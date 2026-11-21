@@ -1,3 +1,4 @@
+import ScreenShare from "./ScreenShare";
 import { FullTrackName } from "moqtail";
 import { useRef, useState, useEffect } from "react";
 import { startCamera, stopCamera } from "./lib/camera";
@@ -20,7 +21,10 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
   const audioRef = useRef<ReturnType<typeof startAudioEncoding> | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const publicationRef = useRef<MediaPublication | null>(null);
-  const [trackNamespace, setTrackNamespace] = useState<string | null>(null);
+  const [activePublication, setActivePublication] = useState<{
+    namespace: string;
+    publication: MediaPublication;
+  } | null>(null);
 
   const [status, setStatus] = useState("Stopped");
 
@@ -71,11 +75,11 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
         : previewTrack;
       const audioTrack = namespace && FullTrackName.tryNew(namespace, "audio");
       const publication = relay && audioTrack ? relay.publishMedia([track, audioTrack]) : null;
-      if (publication) {
+      if (publication && namespace) {
         publicationRef.current = publication;
         await publication.ready;
         if (!mountedRef.current) return;
-        setTrackNamespace(namespace);
+        setActivePublication({ namespace, publication });
       }
 
       const videoTime = createCaptureTimeline();
@@ -163,7 +167,7 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
       }
 
       if (mountedRef.current) {
-        setTrackNamespace(null);
+        setActivePublication(null);
         setStatus("Stopped");
       }
     }
@@ -174,7 +178,7 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
       <h2>Camera preview</h2>
       <p role="status">{status}</p>
       {captureError && <p role="alert">{captureError}</p>}
-      {trackNamespace && <p>Publishing camera to {trackNamespace}</p>}
+      {activePublication && <p>Publishing camera to {activePublication.namespace}</p>}
       <video ref={videoRef} autoPlay muted playsInline />
       <button
         type="button"
@@ -190,6 +194,9 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
       >
         Stop camera
       </button>
+      {status === "Running" && activePublication && (
+        <ScreenShare namespace={activePublication.namespace} publication={activePublication.publication} />
+      )}
     </section>
   );
 }
