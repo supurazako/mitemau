@@ -3,7 +3,7 @@ import BroadcasterApplication from "./BroadcasterApplication";
 import BackupPasskey from "./BackupPasskey";
 import AccountRecovery from "./AccountRecovery";
 import ReplaceRecoveryCodes, { RecoveryCodesDisplay } from "./RecoveryCodes";
-import RelayConnection from "./RelayConnection";
+import StreamManager from "./StreamManager";
 import CameraViewer from "./CameraViewer";
 import { useEffect, useState } from "react";
 import { notifySessionChange, useSessionActivity } from "./useSessionActivity";
@@ -327,7 +327,7 @@ function App() {
   return (
     <main className="registration">
       {signedIn && <BroadcasterApplication key={account.email} />}
-      <RelayConnection />
+      {signedIn && <StreamManager key={account.email} />}
       <CameraViewer />
       <h1>Mitemau</h1>
       {loading ? (

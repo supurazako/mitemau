@@ -29,6 +29,7 @@ func parseStaffIDs(value string) (map[string]bool, error) {
 }
 
 func (s *broadcasterServer) routes(mux *http.ServeMux) {
+	s.streamRoutes(mux)
 	mux.HandleFunc("GET /account/broadcaster", s.status)
 	mux.HandleFunc("POST /account/broadcaster", s.p.verification.protect(s.apply))
 	mux.HandleFunc("GET /staff/broadcasters", s.list)
