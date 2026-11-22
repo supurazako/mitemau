@@ -3,7 +3,7 @@ import { useRef, useEffect, useState } from "react";
 import type { RelaySession } from "./lib/moq";
 import { connectRelay, TEST_RELAY_URL } from "./lib/moq";
 
-export default function RelayConnection() {
+export default function RelayConnection({ namespacePrefix }: { namespacePrefix: string }) {
   const clientRef = useRef<RelaySession | null>(null);
   const [connectedRelay, setConnectedRelay] = useState<RelaySession | null>(null);
   const [status, setStatus] = useState("Disconnected");
@@ -82,6 +82,7 @@ export default function RelayConnection() {
       <CameraPreview
         key={connectedRelay ? "connected" : "offline"}
         relay={connectedRelay}
+        namespacePrefix={namespacePrefix}
       />
     </>
   );

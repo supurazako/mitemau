@@ -12,7 +12,10 @@ import { createVideoObjectBuilder } from "./lib/videoObjects";
 
 const previewTrack = FullTrackName.tryNew("mitemau/preview", "camera");
 
-export default function CameraPreview({ relay }: { relay: RelaySession | null }) {
+export default function CameraPreview({ relay, namespacePrefix }: {
+  relay: RelaySession | null;
+  namespacePrefix: string;
+}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(false);
@@ -69,7 +72,7 @@ export default function CameraPreview({ relay }: { relay: RelaySession | null })
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
-      const namespace = relay ? `mitemau/preview/${crypto.randomUUID()}` : null;
+      const namespace = relay ? `${namespacePrefix}/${crypto.randomUUID()}` : null;
       const track = namespace
         ? FullTrackName.tryNew(namespace, "camera")
         : previewTrack;
