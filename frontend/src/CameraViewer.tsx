@@ -9,10 +9,10 @@ import { createPlaybackTimeline } from "./lib/mediaTiming";
 import { createWatchLifecycle } from "./lib/watchLifecycle";
 import { createCameraDecoder } from "./lib/videoDecoder";
 
-export default function CameraViewer() {
+export default function CameraViewer({ initialNamespace = "" }: { initialNamespace?: string } = {}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stopRef = useRef<(() => void) | null>(null);
-  const [namespace, setNamespace] = useState("");
+  const [namespace, setNamespace] = useState(initialNamespace);
   const [status, setStatus] = useState("Stopped");
   const [screenSession, setScreenSession] = useState<{
     relay: RelaySession;
