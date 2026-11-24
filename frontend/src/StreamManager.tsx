@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import SharedStreamViewer from "./SharedStreamViewer";
+import StreamInvitations from "./StreamInvitations";
 import RelayConnection from "./RelayConnection";
 
-type Stream = { id: string; creatorId: string; title: string; state: "ready" | "live" | "ended" };
+type Stream = { id: string; creatorId: string; publisherId: string; title: string; state: "ready" | "live" | "ended" };
 
 async function request<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, body === undefined ? {} : {
@@ -44,7 +46,7 @@ export default function StreamManager() {
     return () => { active = false; window.clearInterval(timer); };
   }, []);
 
-  async function action(operation: "create" | "start" | "end") {
+  async function action(operation: "create" | "start" | "end" | "leave") {
     if (working.current) return;
     working.current = true;
     generation.current++;
@@ -59,6 +61,12 @@ export default function StreamManager() {
         setTitle("");
       } else {
         if (!selected) return;
+        if (operation === "leave") {
+          await request(`/api/streams/${selected.id}/leave`, {});
+          setStreams((items) => items.filter((item) => item.id !== selected.id));
+          setSelectedID("");
+          return;
+        }
         updated = await request<Stream>(`/api/streams/${selected.id}/${operation}`, {});
       }
       setStreams((items) => [updated, ...items.filter((item) => item.id !== updated.id)]);
@@ -85,14 +93,20 @@ export default function StreamManager() {
         <option value="">Select a stream</option>
         {streams.map((stream) => <option key={stream.id} value={stream.id}>{stream.title} ({stream.state})</option>)}
       </select></label>
+      <StreamInvitations streamID={selected?.creatorId === selected?.publisherId && selected?.state !== "ended" ? selected?.id : undefined}
+        onChanged={() => { generation.current++; }} />
       {selected && (
         <section>
           <h3>{selected.title}</h3>
           <p role="status">{selected.state}</p>
-          <button disabled={busy || selected.state !== "ready"} onClick={() => void action("start")}>Start stream</button>
-          <button disabled={busy || selected.state === "ended"} onClick={() => void action("end")}>End stream for everyone</button>
-          {selected.state === "live" && <RelayConnection key={selected.id}
-            namespacePrefix={`mitemau/streams/${selected.id}/publishers/${selected.creatorId}`} />}
+          <button disabled={busy || selected.state !== "ready" || selected.creatorId !== selected.publisherId} onClick={() => void action("start")}>Start stream</button>
+          <button disabled={busy || selected.state === "ended" || selected.creatorId !== selected.publisherId} onClick={() => void action("end")}>End stream for everyone</button>
+          {selected.creatorId !== selected.publisherId && selected.state !== "ended" && (
+            <button disabled={busy} onClick={() => void action("leave")}>Leave stream</button>
+          )}
+          {selected.state === "live" && <RelayConnection key={`publish-${selected.id}`}
+            streamID={selected.id} />}
+          {selected.state === "live" && <SharedStreamViewer key={`view-${selected.id}`} streamID={selected.id} ownAccountID={selected.publisherId} />}
         </section>
       )}
     </section>

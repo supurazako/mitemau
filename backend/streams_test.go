@@ -83,15 +83,84 @@ func TestStreamsMySQL(t *testing.T) {
 	if w := call("POST", "/streams/"+secondID+"/start", otherToken, "{}"); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	// A second participant must be closed by ending the shared stream.
+	// A participant needs an invitation and current broadcasting permission.
 	raw, _ := hex.DecodeString(id)
-	if _, err = db.Exec("INSERT INTO stream_participants(stream_id,account_id,joined_at) VALUES (?,?,?)", raw, other, now); err != nil {
+	if w := call("POST", "/streams/"+id+"/join", otherToken, "{}"); w.Code != 403 {
+		t.Fatal("uninvited join", w.Code)
+	}
+	inviteBody := `{"accountId":"` + hex.EncodeToString(other) + `"}`
+	if w := call("POST", "/streams/"+id+"/invite", otherToken, inviteBody); w.Code != 403 {
+		t.Fatal("noncreator invited", w.Code)
+	}
+	for i := 0; i < 2; i++ {
+		if w := call("POST", "/streams/"+id+"/invite", token, inviteBody); w.Code != 200 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	if w := call("GET", "/account/invitations", otherToken, ""); !strings.Contains(w.Body.String(), id) {
+		t.Fatal("invitation missing", w.Body.String())
+	}
+	if _, err = db.Exec("UPDATE broadcaster_applications SET approved_at=NULL WHERE account_id=?", other); err != nil {
 		t.Fatal(err)
+	}
+	if w := call("POST", "/streams/"+id+"/join", otherToken, "{}"); w.Code != 403 {
+		t.Fatal("unapproved join", w.Code)
+	}
+	if _, err = db.Exec("UPDATE broadcaster_applications SET approved_at=? WHERE account_id=?", now, other); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if w := call("POST", "/streams/"+id+"/join", otherToken, "{}"); w.Code != 200 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if w := call("POST", "/streams/"+id+"/leave", otherToken, "{}"); w.Code != 200 {
+			t.Fatal(w.Code)
+		}
+	}
+	publicationBody := `{"sessionId":"` + strings.Repeat("a1", 16) + `"}`
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, publicationBody); w.Code != 403 {
+		t.Fatal("departed participant published", w.Code)
+	}
+	var creatorActive int
+	if err = db.QueryRow("SELECT COUNT(*) FROM stream_participants WHERE stream_id=? AND account_id=? AND left_at IS NULL", raw, owner).Scan(&creatorActive); err != nil || creatorActive != 1 {
+		t.Fatal("leaving affected creator", err)
+	}
+	if w := call("POST", "/streams/"+id+"/join", otherToken, "{}"); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, publicationBody); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	preparedBody := `{"sessionId":"` + strings.Repeat("a3", 16) + `","prepare":true}`
+	prepared := call("POST", "/streams/"+id+"/publishing", otherToken, preparedBody)
+	if prepared.Code != 200 {
+		t.Fatal(prepared.Code, prepared.Body.String())
+	}
+	pendingParticipants := call("GET", "/streams/"+id+"/participants", token, "")
+	if strings.Contains(pendingParticipants.Body.String(), strings.Repeat("a3", 16)) || !strings.Contains(pendingParticipants.Body.String(), strings.Repeat("a1", 16)) {
+		t.Fatal("prepare published an unavailable track or replaced active publication", pendingParticipants.Body.String())
+	}
+	secondPublication := `{"sessionId":"` + strings.Repeat("a2", 16) + `"}`
+	publicationResponse := call("POST", "/streams/"+id+"/publishing", otherToken, secondPublication)
+	if publicationResponse.Code != 200 {
+		t.Fatal(publicationResponse.Code, publicationResponse.Body.String())
+	}
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+strings.Repeat("a1", 16)+`","stop":true}`); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	participants := call("GET", "/streams/"+id+"/participants", token, "")
+	if participants.Code != 200 || !strings.Contains(participants.Body.String(), strings.Repeat("a2", 16)) {
+		t.Fatal("old stop removed new publication", participants.Body.String())
 	}
 	for i := 0; i < 2; i++ {
 		if w := call("POST", "/streams/"+id+"/end", token, "{}"); w.Code != 200 {
 			t.Fatal(w.Code, w.Body.String())
 		}
+	}
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, publicationBody); w.Code != 409 {
+		t.Fatal("ended stream published", w.Code)
 	}
 	var active int
 	if err = db.QueryRow("SELECT COUNT(*) FROM stream_participants WHERE stream_id=? AND left_at IS NULL", raw).Scan(&active); err != nil || active != 0 {
@@ -99,6 +168,9 @@ func TestStreamsMySQL(t *testing.T) {
 	}
 	if w := call("POST", "/streams/"+id+"/start", token, "{}"); w.Code != 409 {
 		t.Fatal("ended stream restarted", w.Code)
+	}
+	if w := call("POST", "/streams/"+id+"/join", otherToken, "{}"); w.Code != 409 {
+		t.Fatal("joined ended stream", w.Code)
 	}
 	var list []liveStream
 	w := call("GET", "/account/streams", otherToken, "")

@@ -1,3 +1,4 @@
+import { createPublishingSession } from "./lib/publishingSession";
 import ScreenShare from "./ScreenShare";
 import { FullTrackName } from "moqtail";
 import { useRef, useState, useEffect } from "react";
@@ -12,10 +13,11 @@ import { createVideoObjectBuilder } from "./lib/videoObjects";
 
 const previewTrack = FullTrackName.tryNew("mitemau/preview", "camera");
 
-export default function CameraPreview({ relay, namespacePrefix }: {
+export default function CameraPreview({ relay, streamID }: {
   relay: RelaySession | null;
-  namespacePrefix: string;
+  streamID: string;
 }) {
+  const registrationRef = useRef<ReturnType<typeof createPublishingSession> | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(false);
@@ -45,6 +47,10 @@ export default function CameraPreview({ relay, namespacePrefix }: {
       audioRef.current = null;
       void audio?.stop().catch(console.error);
 
+      const registration = registrationRef.current;
+      registrationRef.current = null;
+      void registration?.stop().catch(console.error);
+
       const publication = publicationRef.current;
       publicationRef.current = null;
       void publication?.stop().catch(console.error);
@@ -72,7 +78,17 @@ export default function CameraPreview({ relay, namespacePrefix }: {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
-      const namespace = relay ? `${namespacePrefix}/${crypto.randomUUID()}` : null;
+      let namespace: string | null = null;
+      if (relay) {
+        const registration = createPublishingSession(streamID);
+        registrationRef.current = registration;
+        const result = await registration.prepare();
+        if (!mountedRef.current) {
+          await registration.stop();
+          return;
+        }
+        namespace = result.namespace;
+      }
       const track = namespace
         ? FullTrackName.tryNew(namespace, "camera")
         : previewTrack;
@@ -82,6 +98,13 @@ export default function CameraPreview({ relay, namespacePrefix }: {
         publicationRef.current = publication;
         await publication.ready;
         if (!mountedRef.current) return;
+        const registration = registrationRef.current;
+        if (!registration) return;
+        await registration.start();
+        if (!mountedRef.current) {
+          await registration.stop();
+          return;
+        }
         setActivePublication({ namespace, publication });
       }
 
@@ -169,6 +192,10 @@ export default function CameraPreview({ relay, namespacePrefix }: {
         console.error("Could not stop camera publication", error);
       }
 
+      const registration = registrationRef.current;
+      registrationRef.current = null;
+      try { await registration?.stop(); }
+      catch (error) { console.error("Could not clear publication", error); }
       if (mountedRef.current) {
         setActivePublication(null);
         setStatus("Stopped");

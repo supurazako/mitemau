@@ -11,14 +11,16 @@ import (
 )
 
 type liveStream struct {
-	ID        string `json:"id"`
-	CreatorID string `json:"creatorId"`
-	Title     string `json:"title"`
-	State     string `json:"state"`
+	ID          string `json:"id"`
+	CreatorID   string `json:"creatorId"`
+	Title       string `json:"title"`
+	State       string `json:"state"`
+	PublisherID string `json:"publisherId"`
 }
 
 func (s *broadcasterServer) streamRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /account/streams", s.ownedStreams)
+	s.invitationRoutes(mux)
 	mux.HandleFunc("POST /streams", s.p.verification.protect(s.createStream))
 	mux.HandleFunc("POST /streams/{id}/start", s.p.verification.protect(s.startStream))
 	mux.HandleFunc("POST /streams/{id}/end", s.p.verification.protect(s.endStream))
@@ -29,7 +31,10 @@ func (s *broadcasterServer) ownedStreams(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	rows, err := s.p.verification.db.QueryContext(r.Context(), "SELECT id,title,state FROM live_streams WHERE creator_id=? ORDER BY created_at DESC,id", id)
+	rows, err := s.p.verification.db.QueryContext(r.Context(), `SELECT s.id,s.creator_id,s.title,s.state FROM live_streams s
+ LEFT JOIN stream_participants p ON p.stream_id=s.id AND p.account_id=?
+ WHERE s.creator_id=? OR (p.account_id IS NOT NULL AND p.left_at IS NULL)
+ ORDER BY s.created_at DESC,s.id`, id, id)
 	if err != nil {
 		problem(w, 503, "Could not load streams")
 		return
@@ -37,14 +42,15 @@ func (s *broadcasterServer) ownedStreams(w http.ResponseWriter, r *http.Request)
 	defer rows.Close()
 	streams := []liveStream{}
 	for rows.Next() {
-		var raw []byte
+		var raw, creator []byte
 		var item liveStream
-		if err = rows.Scan(&raw, &item.Title, &item.State); err != nil {
+		if err = rows.Scan(&raw, &creator, &item.Title, &item.State); err != nil {
 			problem(w, 503, "Could not load streams")
 			return
 		}
 		item.ID = hex.EncodeToString(raw)
-		item.CreatorID = hex.EncodeToString(id)
+		item.CreatorID = hex.EncodeToString(creator)
+		item.PublisherID = hex.EncodeToString(id)
 		streams = append(streams, item)
 	}
 	if rows.Err() != nil {
@@ -131,6 +137,7 @@ func (s *broadcasterServer) createStream(w http.ResponseWriter, r *http.Request)
 	}
 	item.ID = hex.EncodeToString(id)
 	item.CreatorID = hex.EncodeToString(actor)
+	item.PublisherID = hex.EncodeToString(actor)
 	writeJSON(w, 200, item)
 }
 func (s *broadcasterServer) startStream(w http.ResponseWriter, r *http.Request) {
@@ -197,7 +204,7 @@ func (s *broadcasterServer) transitionStream(w http.ResponseWriter, r *http.Requ
 		} else {
 			_, err = tx.ExecContext(r.Context(), "UPDATE live_streams SET state='ended',ended_at=? WHERE id=?", now, id)
 			if err == nil {
-				_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET left_at=? WHERE stream_id=? AND left_at IS NULL", now, id)
+				_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET left_at=?,publisher_namespace=NULL WHERE stream_id=? AND left_at IS NULL", now, id)
 			}
 		}
 		if err != nil {
@@ -211,6 +218,7 @@ func (s *broadcasterServer) transitionStream(w http.ResponseWriter, r *http.Requ
 	}
 	item.ID = hex.EncodeToString(id)
 	item.CreatorID = hex.EncodeToString(actor)
+	item.PublisherID = hex.EncodeToString(actor)
 	item.State = target
 	writeJSON(w, 200, item)
 }
