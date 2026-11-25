@@ -39,7 +39,7 @@ func TestStreamsMySQL(t *testing.T) {
 	// Remove streams first because they retain creator and participant references.
 	defer func() { db.Exec("DELETE FROM live_streams WHERE creator_id IN (?,?)", owner, other) }()
 	v := newVerificationServer(db, &recordingSender{}, testConfig())
-	s := &broadcasterServer{p: &passkeyServer{verification: v}}
+	s := &broadcasterServer{p: &passkeyServer{verification: v}, relayAuthKey: bytes.Repeat([]byte{0x71}, 32)}
 	mux := http.NewServeMux()
 	s.routes(mux)
 	call := func(method, path, token, body string) *httptest.ResponseRecorder {
@@ -130,25 +130,107 @@ func TestStreamsMySQL(t *testing.T) {
 	if w := call("POST", "/streams/"+id+"/join", otherToken, "{}"); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, publicationBody); w.Code != 409 {
+		t.Fatal("unprepared session accepted", w.Code)
+	}
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+strings.Repeat("a1", 16)+`","prepare":true}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
 	if w := call("POST", "/streams/"+id+"/publishing", otherToken, publicationBody); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
+	}
+	relayCheck := func(credential string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/relay/authorize", strings.NewReader(`{"token":"`+credential+`"}`))
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Authorization", "Bearer "+hex.EncodeToString(s.relayAuthKey))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		return w
+	}
+	grantToken := s.publisherCredential("mitemau/streams/" + id + "/publishers/" + hex.EncodeToString(other) + "/" + strings.Repeat("a1", 16))
+	if w := relayCheck(grantToken); w.Code != 200 {
+		t.Fatal("authorized relay", w.Code, w.Body.String())
+	}
+	previousRelayKey := s.relayAuthKey
+	s.relayAuthKey = bytes.Repeat([]byte{0x72}, 32)
+	if w := relayCheck(grantToken); w.Code != 403 {
+		t.Fatal("key rotation accepted an old publishing credential", w.Code)
+	}
+	s.relayAuthKey = previousRelayKey
+	if _, err = db.Exec("UPDATE broadcaster_applications SET approved_at=NULL WHERE account_id=?", other); err != nil {
+		t.Fatal(err)
+	}
+	if w := relayCheck(grantToken); w.Code != 403 {
+		t.Fatal("unapproved grant accepted", w.Code)
+	}
+	if _, err = db.Exec("UPDATE broadcaster_applications SET approved_at=? WHERE account_id=?", now, other); err != nil {
+		t.Fatal(err)
+	}
+	if w := relayCheck(strings.Repeat("00", 32)); w.Code != 403 {
+		t.Fatal("unknown relay credential", w.Code)
+	}
+	unauthenticated := httptest.NewRecorder()
+	mux.ServeHTTP(unauthenticated, httptest.NewRequest("POST", "/relay/authorize", strings.NewReader("{}")))
+	if unauthenticated.Code != 401 {
+		t.Fatal("relay service authentication", unauthenticated.Code)
+	}
+	if w := call("POST", "/streams/"+id+"/leave", otherToken, "{}"); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	if w := relayCheck(grantToken); w.Code != 403 {
+		t.Fatal("departed grant accepted", w.Code)
+	}
+	if w := call("POST", "/streams/"+id+"/join", otherToken, "{}"); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	if w := relayCheck(grantToken); w.Code != 403 {
+		t.Fatal("rejoin revived old grant", w.Code)
+	}
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+strings.Repeat("a1", 16)+`","prepare":true}`); w.Code != 409 {
+		t.Fatal("revoked prepare revived grant", w.Code)
+	}
+	// Use a fresh session after rejoining.
+	publicationBody = `{"sessionId":"` + strings.Repeat("a4", 16) + `"}`
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+strings.Repeat("a4", 16)+`","prepare":true}`); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, publicationBody); w.Code != 200 {
+		t.Fatal(w.Code)
 	}
 	preparedBody := `{"sessionId":"` + strings.Repeat("a3", 16) + `","prepare":true}`
 	prepared := call("POST", "/streams/"+id+"/publishing", otherToken, preparedBody)
 	if prepared.Code != 200 {
 		t.Fatal(prepared.Code, prepared.Body.String())
 	}
+	preparedRetry := call("POST", "/streams/"+id+"/publishing", otherToken, preparedBody)
+	if preparedRetry.Code != 200 || preparedRetry.Body.String() != prepared.Body.String() {
+		t.Fatal("prepare retry changed credential", preparedRetry.Code)
+	}
+	// A stop racing ahead of preparation must leave a tombstone.
+	stoppedSession := strings.Repeat("a5", 16)
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+stoppedSession+`","stop":true}`); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+stoppedSession+`","prepare":true}`); w.Code != 409 {
+		t.Fatal("late prepare revived stop", w.Code)
+	}
 	pendingParticipants := call("GET", "/streams/"+id+"/participants", token, "")
-	if strings.Contains(pendingParticipants.Body.String(), strings.Repeat("a3", 16)) || !strings.Contains(pendingParticipants.Body.String(), strings.Repeat("a1", 16)) {
+	if strings.Contains(pendingParticipants.Body.String(), strings.Repeat("a3", 16)) || !strings.Contains(pendingParticipants.Body.String(), strings.Repeat("a4", 16)) {
 		t.Fatal("prepare published an unavailable track or replaced active publication", pendingParticipants.Body.String())
 	}
 	secondPublication := `{"sessionId":"` + strings.Repeat("a2", 16) + `"}`
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+strings.Repeat("a2", 16)+`","prepare":true}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
 	publicationResponse := call("POST", "/streams/"+id+"/publishing", otherToken, secondPublication)
 	if publicationResponse.Code != 200 {
 		t.Fatal(publicationResponse.Code, publicationResponse.Body.String())
 	}
 	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+strings.Repeat("a1", 16)+`","stop":true}`); w.Code != 200 {
 		t.Fatal(w.Code)
+	}
+	if w := relayCheck(s.publisherCredential("mitemau/streams/" + id + "/publishers/" + hex.EncodeToString(other) + "/" + strings.Repeat("a2", 16))); w.Code != 200 {
+		t.Fatal("old stop revoked new grant", w.Code)
 	}
 	participants := call("GET", "/streams/"+id+"/participants", token, "")
 	if participants.Code != 200 || !strings.Contains(participants.Body.String(), strings.Repeat("a2", 16)) {
@@ -158,6 +240,9 @@ func TestStreamsMySQL(t *testing.T) {
 		if w := call("POST", "/streams/"+id+"/end", token, "{}"); w.Code != 200 {
 			t.Fatal(w.Code, w.Body.String())
 		}
+	}
+	if w := relayCheck(s.publisherCredential("mitemau/streams/" + id + "/publishers/" + hex.EncodeToString(other) + "/" + strings.Repeat("a2", 16))); w.Code != 403 {
+		t.Fatal("ended grant accepted", w.Code)
 	}
 	if w := call("POST", "/streams/"+id+"/publishing", otherToken, publicationBody); w.Code != 409 {
 		t.Fatal("ended stream published", w.Code)

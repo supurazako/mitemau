@@ -9,6 +9,7 @@ import (
 func (s *broadcasterServer) publisherRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /streams/{id}/participants", s.participants)
 	mux.HandleFunc("POST /streams/{id}/publishing", s.p.verification.protect(s.publishing))
+	mux.HandleFunc("POST /relay/authorize", s.authorizeRelay)
 }
 
 func (s *broadcasterServer) participants(w http.ResponseWriter, r *http.Request) {
@@ -105,7 +106,14 @@ func (s *broadcasterServer) publishing(w http.ResponseWriter, r *http.Request) {
 		problem(w, 503, "Could not update publishing")
 		return
 	}
+	credential := s.publisherCredential(namespace)
 	if input.Stop {
+		_, err = tx.ExecContext(r.Context(), `INSERT INTO stream_publishing_grants(stream_id,account_id,session_id,token_hash,revoked_at)
+ VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE revoked_at=COALESCE(revoked_at,VALUES(revoked_at))`, id, actor, session, tokenHash(credential), s.p.verification.now())
+		if err != nil {
+			problem(w, 503, "Could not revoke publishing")
+			return
+		}
 		_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET publisher_namespace=NULL WHERE stream_id=? AND account_id=? AND publisher_namespace=?", id, actor, namespace)
 	} else {
 		if state != "live" {
@@ -123,6 +131,24 @@ func (s *broadcasterServer) publishing(w http.ResponseWriter, r *http.Request) {
 			problem(w, 403, "Active participation and broadcasting permission required")
 			return
 		}
+		if input.Prepare {
+			_, err = tx.ExecContext(r.Context(), `INSERT INTO stream_publishing_grants(stream_id,account_id,session_id,token_hash)
+ VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE token_hash=token_hash`, id, actor, session, tokenHash(credential))
+			if err != nil {
+				problem(w, 503, "Could not prepare publishing")
+				return
+			}
+		}
+		var permitted int
+		err = tx.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM stream_publishing_grants WHERE stream_id=? AND account_id=? AND session_id=? AND revoked_at IS NULL AND token_hash=?", id, actor, session, tokenHash(credential)).Scan(&permitted)
+		if err != nil {
+			problem(w, 503, "Could not check publishing grant")
+			return
+		}
+		if permitted == 0 {
+			problem(w, 409, "Prepare a new publishing session")
+			return
+		}
 		if !input.Prepare {
 			_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET publisher_namespace=? WHERE stream_id=? AND account_id=?", namespace, id, actor)
 		}
@@ -135,5 +161,10 @@ func (s *broadcasterServer) publishing(w http.ResponseWriter, r *http.Request) {
 		problem(w, 503, "Could not update publishing")
 		return
 	}
-	writeJSON(w, 200, map[string]string{"namespace": namespace})
+	result := map[string]string{"namespace": namespace}
+	if input.Prepare {
+		result["token"] = credential
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, 200, result)
 }

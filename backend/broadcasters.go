@@ -9,8 +9,9 @@ import (
 )
 
 type broadcasterServer struct {
-	p        *passkeyServer
-	staffIDs map[string]bool
+	p            *passkeyServer
+	staffIDs     map[string]bool
+	relayAuthKey []byte
 }
 
 func parseStaffIDs(value string) (map[string]bool, error) {
