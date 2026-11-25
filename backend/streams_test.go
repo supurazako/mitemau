@@ -38,7 +38,10 @@ func TestStreamsMySQL(t *testing.T) {
 		}
 	}
 	// Remove streams first because they retain creator and participant references.
-	defer func() { db.Exec("DELETE FROM live_streams WHERE creator_id IN (?,?)", owner, other) }()
+	defer func() {
+		db.Exec("DELETE FROM moderation_events WHERE account_id IN (?,?)", owner, other)
+		db.Exec("DELETE FROM live_streams WHERE creator_id IN (?,?)", owner, other)
+	}()
 	v := newVerificationServer(db, &recordingSender{}, testConfig())
 	s := &broadcasterServer{p: &passkeyServer{verification: v}, relayAuthKey: bytes.Repeat([]byte{0x71}, 32)}
 	mux := http.NewServeMux()

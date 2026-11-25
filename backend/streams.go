@@ -126,6 +126,10 @@ func (s *broadcasterServer) createStream(w http.ResponseWriter, r *http.Request)
 			problem(w, 503, "Could not create stream")
 			return
 		}
+		if _, err = recordActivity(r.Context(), tx, "participant_joined", actor, actor, id, nil, nil, now); err != nil {
+			problem(w, 503, "Could not record participation")
+			return
+		}
 		item.Title = title
 		item.State = "ready"
 	} else {
@@ -203,6 +207,33 @@ func (s *broadcasterServer) transitionStream(w http.ResponseWriter, r *http.Requ
 		if target == "live" {
 			_, err = tx.ExecContext(r.Context(), "UPDATE live_streams SET state='live',started_at=? WHERE id=?", now, id)
 		} else {
+			rows, loadErr := tx.QueryContext(r.Context(), "SELECT account_id FROM stream_participants WHERE stream_id=? AND left_at IS NULL", id)
+			if loadErr != nil {
+				problem(w, 503, "Could not load departures")
+				return
+			}
+			var departing [][]byte
+			for rows.Next() {
+				var account []byte
+				if loadErr = rows.Scan(&account); loadErr != nil {
+					break
+				}
+				departing = append(departing, account)
+			}
+			if loadErr == nil {
+				loadErr = rows.Err()
+			}
+			rows.Close()
+			if loadErr != nil {
+				problem(w, 503, "Could not load departures")
+				return
+			}
+			for _, account := range departing {
+				if _, err = recordActivity(r.Context(), tx, "participant_left", actor, account, id, nil, nil, now); err != nil {
+					problem(w, 503, "Could not record departure")
+					return
+				}
+			}
 			_, err = tx.ExecContext(r.Context(), "UPDATE live_streams SET state='ended',ended_at=? WHERE id=?", now, id)
 			if err == nil {
 				_, err = tx.ExecContext(r.Context(), "UPDATE stream_publishing_grants SET revoked_at=COALESCE(revoked_at,?) WHERE stream_id=?", now, id)
@@ -210,6 +241,16 @@ func (s *broadcasterServer) transitionStream(w http.ResponseWriter, r *http.Requ
 			if err == nil {
 				_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET left_at=?,publisher_namespace=NULL,publisher_seen_at=NULL,publishing_state='stopped' WHERE stream_id=? AND left_at IS NULL", now, id)
 			}
+		}
+		if err == nil {
+			kind := "stream_started"
+			if target == "ended" {
+				kind = "stream_ended"
+			}
+			_, err = recordActivity(r.Context(), tx, kind, actor, creator, id, nil, nil, now)
+		}
+		if err == nil && target == "ended" {
+			err = hideStreamCommentContent(r.Context(), tx, id, now)
 		}
 		if err != nil {
 			problem(w, 503, "Could not update stream")
