@@ -91,12 +91,15 @@ export default function RelayConnection({ streamID }: { streamID: string }) {
     setPublishing(null);
     const registration = registrationRef.current;
     registrationRef.current = null;
-    try {
-      await registration?.stop();
-    } catch (error) {
+    // A stalled API request must not keep the sending connection open.
+    void registration?.stop().catch((error) => {
       console.error("Could not revoke publishing", error);
+    });
+    try {
+      await session?.disconnect();
+    } catch (error) {
+      console.error("Could not disconnect Relay", error);
     } finally {
-      await session?.disconnect().catch(console.error);
       if (mountedRef.current && version === connectionVersion.current) setStatus("Disconnected");
     }
   }

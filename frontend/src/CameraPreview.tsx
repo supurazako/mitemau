@@ -183,17 +183,16 @@ export default function CameraPreview({ relay, publishing, onPublishingStopped }
 
       const publication = publicationRef.current;
       publicationRef.current = null;
+      const registration = registrationRef.current;
+      registrationRef.current = null;
+      // Start revocation and connection closure before waiting for protocol
+      // cleanup, whose response may never arrive.
+      if (registration) onPublishingStopped();
       try {
         await publication?.stop();
       } catch (error) {
         console.error("Could not stop camera publication", error);
       }
-
-      const registration = registrationRef.current;
-      registrationRef.current = null;
-      try { await registration?.stop(); }
-      catch (error) { console.error("Could not clear publication", error); }
-      if (registration) onPublishingStopped();
       if (mountedRef.current) {
         setActivePublication(null);
         setStatus("Stopped");
