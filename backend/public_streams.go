@@ -72,9 +72,10 @@ func (s *broadcasterServer) publicStream(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	// One statement keeps stream state and the visible participants in one snapshot.
-	rows, err := s.p.verification.db.QueryContext(r.Context(), `SELECT s.id,s.creator_id,s.title,p.account_id,p.publisher_namespace
+	cutoff := s.p.verification.now().Add(-publisherLease)
+	rows, err := s.p.verification.db.QueryContext(r.Context(), `SELECT s.id,s.creator_id,s.title,p.account_id,`+visiblePublishing+`
  FROM live_streams s LEFT JOIN stream_participants p ON p.stream_id=s.id AND p.left_at IS NULL
- WHERE s.id=? AND s.state='live' ORDER BY p.joined_at,p.account_id`, id)
+ WHERE s.id=? AND s.state='live' ORDER BY p.joined_at,p.account_id`, cutoff, cutoff, id)
 	if err != nil {
 		problem(w, 503, "Could not load stream")
 		return
@@ -85,14 +86,15 @@ func (s *broadcasterServer) publicStream(w http.ResponseWriter, r *http.Request)
 	for rows.Next() {
 		var raw, creator, account []byte
 		var namespace sql.NullString
-		if err = rows.Scan(&raw, &creator, &item.Title, &account, &namespace); err != nil {
+		var publishingState sql.NullString
+		if err = rows.Scan(&raw, &creator, &item.Title, &account, &namespace, &publishingState); err != nil {
 			problem(w, 503, "Could not load stream")
 			return
 		}
 		item.ID = hex.EncodeToString(raw)
 		item.CreatorID = hex.EncodeToString(creator)
 		if account != nil {
-			participant := streamParticipant{AccountID: hex.EncodeToString(account)}
+			participant := streamParticipant{AccountID: hex.EncodeToString(account), PublishingState: publishingState.String}
 			if namespace.Valid {
 				participant.Namespace = &namespace.String
 			}

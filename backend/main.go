@@ -78,7 +78,9 @@ func main() {
 	if err != nil || len(relayKey) != 32 {
 		log.Fatal("RELAY_AUTH_KEY must contain 32 random bytes encoded as hex")
 	}
-	(&broadcasterServer{p: passkeys, staffIDs: staffIDs, relayAuthKey: relayKey}).routes(mux)
+	broadcasters := &broadcasterServer{p: passkeys, staffIDs: staffIDs, relayAuthKey: relayKey}
+	broadcasters.routes(mux)
+	go broadcasters.runPublisherCleanup(context.Background())
 	verification.registeredEmail = passkeys.registeredEmail
 	go verification.runCleanup(context.Background())
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {

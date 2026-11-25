@@ -7,8 +7,9 @@ import (
 )
 
 type streamParticipant struct {
-	AccountID string  `json:"accountId"`
-	Namespace *string `json:"namespace"`
+	AccountID       string  `json:"accountId"`
+	Namespace       *string `json:"namespace"`
+	PublishingState string  `json:"publishingState"`
 }
 
 func (s *broadcasterServer) publisherRoutes(mux *http.ServeMux) {
@@ -18,6 +19,7 @@ func (s *broadcasterServer) publisherRoutes(mux *http.ServeMux) {
 }
 
 func (s *broadcasterServer) participants(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	actor, ok := s.authenticate(w, r, false)
 	if !ok {
 		return
@@ -38,9 +40,10 @@ func (s *broadcasterServer) participants(w http.ResponseWriter, r *http.Request)
 		problem(w, 403, "Participation required")
 		return
 	}
-	rows, err := s.p.verification.db.QueryContext(r.Context(), `SELECT p.account_id,p.publisher_namespace
+	cutoff := s.p.verification.now().Add(-publisherLease)
+	rows, err := s.p.verification.db.QueryContext(r.Context(), `SELECT p.account_id,`+visiblePublishing+`
  FROM stream_participants p JOIN live_streams s ON s.id=p.stream_id
- WHERE p.stream_id=? AND p.left_at IS NULL AND s.state='live' ORDER BY p.joined_at,p.account_id`, id)
+ WHERE p.stream_id=? AND p.left_at IS NULL AND s.state='live' ORDER BY p.joined_at,p.account_id`, cutoff, cutoff, id)
 	if err != nil {
 		problem(w, 503, "Could not load participants")
 		return
@@ -50,11 +53,12 @@ func (s *broadcasterServer) participants(w http.ResponseWriter, r *http.Request)
 	for rows.Next() {
 		var raw []byte
 		var namespace sql.NullString
-		if err = rows.Scan(&raw, &namespace); err != nil {
+		var itemState string
+		if err = rows.Scan(&raw, &namespace, &itemState); err != nil {
 			problem(w, 503, "Could not load participants")
 			return
 		}
-		item := streamParticipant{AccountID: hex.EncodeToString(raw)}
+		item := streamParticipant{AccountID: hex.EncodeToString(raw), PublishingState: itemState}
 		if namespace.Valid {
 			item.Namespace = &namespace.String
 		}
@@ -78,9 +82,10 @@ func (s *broadcasterServer) publishing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		SessionID string `json:"sessionId"`
-		Stop      bool   `json:"stop"`
-		Prepare   bool   `json:"prepare"`
+		SessionID    string `json:"sessionId"`
+		Stop         bool   `json:"stop"`
+		Prepare      bool   `json:"prepare"`
+		Disconnected bool   `json:"disconnected"`
 	}
 	if !decodeBody(w, r, &input) {
 		return
@@ -115,7 +120,11 @@ func (s *broadcasterServer) publishing(w http.ResponseWriter, r *http.Request) {
 			problem(w, 503, "Could not revoke publishing")
 			return
 		}
-		_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET publisher_namespace=NULL WHERE stream_id=? AND account_id=? AND publisher_namespace=?", id, actor, namespace)
+		publishingState := "stopped"
+		if input.Disconnected {
+			publishingState = "disconnected"
+		}
+		_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET publisher_namespace=NULL,publisher_seen_at=NULL,publishing_state=? WHERE stream_id=? AND account_id=? AND publisher_namespace=?", publishingState, id, actor, namespace)
 	} else {
 		if state != "live" {
 			problem(w, 409, "Stream is not live")
@@ -151,7 +160,20 @@ func (s *broadcasterServer) publishing(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !input.Prepare {
-			_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET publisher_namespace=? WHERE stream_id=? AND account_id=?", namespace, id, actor)
+			var seen sql.NullTime
+			err = tx.QueryRowContext(r.Context(), "SELECT last_relay_seen_at FROM stream_publishing_grants WHERE stream_id=? AND account_id=? AND session_id=?", id, actor, session).Scan(&seen)
+			if err != nil {
+				problem(w, 503, "Could not check Relay connection")
+				return
+			}
+			if !seen.Valid || !seen.Time.After(s.p.verification.now().Add(-publisherLease)) {
+				problem(w, 409, "Connect a new publishing session to Relay")
+				return
+			}
+			_, err = tx.ExecContext(r.Context(), "UPDATE stream_publishing_grants SET revoked_at=? WHERE stream_id=? AND account_id=? AND session_id<>? AND revoked_at IS NULL", s.p.verification.now(), id, actor, session)
+			if err == nil {
+				_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET publisher_namespace=?,publisher_seen_at=?,publishing_state='publishing' WHERE stream_id=? AND account_id=?", namespace, seen.Time, id, actor)
+			}
 		}
 	}
 	if err != nil {

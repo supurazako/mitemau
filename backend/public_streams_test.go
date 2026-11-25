@@ -53,11 +53,11 @@ func TestPublicStreamsMySQL(t *testing.T) {
 	firstNamespace := "mitemau/streams/" + hex.EncodeToString(first) + "/publishers/" + hex.EncodeToString(owner) + "/session"
 	otherNamespace := "mitemau/streams/" + hex.EncodeToString(second) + "/publishers/" + hex.EncodeToString(guest) + "/session"
 	for index, account := range [][]byte{owner, guest} {
-		if _, err = db.Exec("INSERT INTO stream_participants(stream_id,account_id,joined_at,publisher_namespace) VALUES(?,?,?,?)", first, account, now.Add(time.Duration(index)*time.Second), "mitemau/streams/"+hex.EncodeToString(first)+"/publishers/"+hex.EncodeToString(account)+"/session"); err != nil {
+		if _, err = db.Exec("INSERT INTO stream_participants(stream_id,account_id,joined_at,publisher_namespace,publisher_seen_at,publishing_state) VALUES(?,?,?,?,UTC_TIMESTAMP(6),'publishing')", first, account, now.Add(time.Duration(index)*time.Second), "mitemau/streams/"+hex.EncodeToString(first)+"/publishers/"+hex.EncodeToString(account)+"/session"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err = db.Exec("INSERT INTO stream_participants(stream_id,account_id,joined_at,publisher_namespace) VALUES(?,?,?,?)", second, guest, now.Add(-time.Minute), otherNamespace); err != nil {
+	if _, err = db.Exec("INSERT INTO stream_participants(stream_id,account_id,joined_at,publisher_namespace,publisher_seen_at,publishing_state) VALUES(?,?,?,?,UTC_TIMESTAMP(6),'publishing')", second, guest, now.Add(-time.Minute), otherNamespace); err != nil {
 		t.Fatal(err)
 	}
 	server := &broadcasterServer{p: &passkeyServer{verification: newVerificationServer(db, &recordingSender{}, testConfig())}}

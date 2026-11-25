@@ -56,5 +56,45 @@ func (s *broadcasterServer) authorizeRelay(w http.ResponseWriter, r *http.Reques
 		problem(w, 403, "Publishing permission denied")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"namespace": namespace, "leaseSeconds": 15})
+
+	tx, err := s.p.verification.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		problem(w, 503, "Publishing permission temporarily unavailable")
+		return
+	}
+	defer tx.Rollback()
+	var state string
+	if err = tx.QueryRowContext(r.Context(), "SELECT state FROM live_streams WHERE id=? FOR UPDATE", stream).Scan(&state); err != nil {
+		problem(w, 503, "Publishing permission temporarily unavailable")
+		return
+	}
+	now := s.p.verification.now()
+	var authorizedSession []byte
+	err = tx.QueryRowContext(r.Context(), `SELECT g.session_id FROM stream_publishing_grants g
+ JOIN stream_participants p ON p.stream_id=g.stream_id AND p.account_id=g.account_id
+ JOIN broadcaster_applications b ON b.account_id=g.account_id
+ WHERE g.token_hash=? AND g.revoked_at IS NULL AND (g.last_relay_seen_at IS NULL OR g.last_relay_seen_at>?) AND p.left_at IS NULL AND b.approved_at IS NOT NULL AND ?='live' FOR UPDATE`, tokenHash(input.Token), now.Add(-publisherLease), state).Scan(&authorizedSession)
+	if err == sql.ErrNoRows {
+		problem(w, 403, "Publishing permission denied")
+		return
+	}
+	if err != nil {
+		problem(w, 503, "Publishing permission temporarily unavailable")
+		return
+	}
+	_, err = tx.ExecContext(r.Context(), "UPDATE stream_publishing_grants SET last_relay_seen_at=? WHERE token_hash=? AND revoked_at IS NULL", now, tokenHash(input.Token))
+	if err != nil {
+		problem(w, 503, "Publishing permission temporarily unavailable")
+		return
+	}
+	_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET publisher_seen_at=? WHERE stream_id=? AND account_id=? AND publisher_namespace=? AND publishing_state='publishing'", now, stream, account, namespace)
+	if err != nil {
+		problem(w, 503, "Publishing permission temporarily unavailable")
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		problem(w, 503, "Publishing permission temporarily unavailable")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"namespace": namespace, "leaseSeconds": int(publisherLease.Seconds())})
 }

@@ -208,7 +208,7 @@ func (s *broadcasterServer) transitionStream(w http.ResponseWriter, r *http.Requ
 				_, err = tx.ExecContext(r.Context(), "UPDATE stream_publishing_grants SET revoked_at=COALESCE(revoked_at,?) WHERE stream_id=?", now, id)
 			}
 			if err == nil {
-				_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET left_at=?,publisher_namespace=NULL WHERE stream_id=? AND left_at IS NULL", now, id)
+				_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET left_at=?,publisher_namespace=NULL,publisher_seen_at=NULL,publishing_state='stopped' WHERE stream_id=? AND left_at IS NULL", now, id)
 			}
 		}
 		if err != nil {

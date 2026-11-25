@@ -136,7 +136,7 @@ func (s *broadcasterServer) participation(w http.ResponseWriter, r *http.Request
 			problem(w, 503, "Could not revoke publishing")
 			return
 		}
-		_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET left_at=?,publisher_namespace=NULL WHERE stream_id=? AND account_id=? AND left_at IS NULL", now, id, actor)
+		_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET left_at=?,publisher_namespace=NULL,publisher_seen_at=NULL,publishing_state='stopped' WHERE stream_id=? AND account_id=? AND left_at IS NULL", now, id, actor)
 	}
 	if err != nil {
 		problem(w, 503, "Could not update participation")

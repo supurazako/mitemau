@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import CameraViewer from "./CameraViewer";
 
-type Participant = { accountId: string; namespace: string | null };
+type Participant = { accountId: string; namespace: string | null; publishingState: "stopped" | "publishing" | "disconnected" };
 
 export default function SharedStreamViewer({ streamID, ownAccountID }: {
   streamID: string;
@@ -40,7 +40,7 @@ export default function SharedStreamViewer({ streamID, ownAccountID }: {
       {participants.map((participant) => (
         <section key={participant.accountId}>
           <p>{participant.accountId}{participant.accountId === ownAccountID ? " (you)" : ""}</p>
-          {!participant.namespace && <p>Not publishing</p>}
+          {!participant.namespace && <p>{participant.publishingState === "disconnected" ? "Connection lost. Waiting for the participant to reconnect." : "Not publishing"}</p>}
           {participant.namespace && participant.accountId !== ownAccountID && (
             <CameraViewer key={participant.namespace} initialNamespace={participant.namespace} />
           )}

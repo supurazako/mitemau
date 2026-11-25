@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -119,6 +120,14 @@ func TestStreamsMySQL(t *testing.T) {
 			t.Fatal(w.Code)
 		}
 	}
+	relayCheck := func(credential string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/relay/authorize", strings.NewReader(`{"token":"`+credential+`"}`))
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Authorization", "Bearer "+hex.EncodeToString(s.relayAuthKey))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		return w
+	}
 	publicationBody := `{"sessionId":"` + strings.Repeat("a1", 16) + `"}`
 	if w := call("POST", "/streams/"+id+"/publishing", otherToken, publicationBody); w.Code != 403 {
 		t.Fatal("departed participant published", w.Code)
@@ -136,16 +145,11 @@ func TestStreamsMySQL(t *testing.T) {
 	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+strings.Repeat("a1", 16)+`","prepare":true}`); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
+	if w := relayCheck(s.publisherCredential("mitemau/streams/" + id + "/publishers/" + hex.EncodeToString(other) + "/" + strings.Repeat("a1", 16))); w.Code != 200 {
+		t.Fatal("Relay setup", w.Code, w.Body.String())
+	}
 	if w := call("POST", "/streams/"+id+"/publishing", otherToken, publicationBody); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
-	}
-	relayCheck := func(credential string) *httptest.ResponseRecorder {
-		r := httptest.NewRequest("POST", "/relay/authorize", strings.NewReader(`{"token":"`+credential+`"}`))
-		r.Header.Set("Content-Type", "application/json")
-		r.Header.Set("Authorization", "Bearer "+hex.EncodeToString(s.relayAuthKey))
-		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, r)
-		return w
 	}
 	grantToken := s.publisherCredential("mitemau/streams/" + id + "/publishers/" + hex.EncodeToString(other) + "/" + strings.Repeat("a1", 16))
 	if w := relayCheck(grantToken); w.Code != 200 {
@@ -194,6 +198,9 @@ func TestStreamsMySQL(t *testing.T) {
 	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+strings.Repeat("a4", 16)+`","prepare":true}`); w.Code != 200 {
 		t.Fatal(w.Code)
 	}
+	if w := relayCheck(s.publisherCredential("mitemau/streams/" + id + "/publishers/" + hex.EncodeToString(other) + "/" + strings.Repeat("a4", 16))); w.Code != 200 {
+		t.Fatal("Relay setup", w.Code, w.Body.String())
+	}
 	if w := call("POST", "/streams/"+id+"/publishing", otherToken, publicationBody); w.Code != 200 {
 		t.Fatal(w.Code)
 	}
@@ -222,6 +229,9 @@ func TestStreamsMySQL(t *testing.T) {
 	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+strings.Repeat("a2", 16)+`","prepare":true}`); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
+	if w := relayCheck(s.publisherCredential("mitemau/streams/" + id + "/publishers/" + hex.EncodeToString(other) + "/" + strings.Repeat("a2", 16))); w.Code != 200 {
+		t.Fatal("Relay setup", w.Code, w.Body.String())
+	}
 	publicationResponse := call("POST", "/streams/"+id+"/publishing", otherToken, secondPublication)
 	if publicationResponse.Code != 200 {
 		t.Fatal(publicationResponse.Code, publicationResponse.Body.String())
@@ -236,6 +246,127 @@ func TestStreamsMySQL(t *testing.T) {
 	if participants.Code != 200 || !strings.Contains(participants.Body.String(), strings.Repeat("a2", 16)) {
 		t.Fatal("old stop removed new publication", participants.Body.String())
 	}
+
+	// No stop request arrives. Reads hide expiry even before periodic cleanup.
+	clock := time.Now().UTC().Add(20 * time.Second)
+	v.now = func() time.Time { return clock }
+	ownerSession := strings.Repeat("b1", 16)
+	ownerBody := `{"sessionId":"` + ownerSession + `"}`
+	if w := call("POST", "/streams/"+id+"/publishing", token, `{"sessionId":"`+ownerSession+`","prepare":true}`); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	ownerGrant := s.publisherCredential("mitemau/streams/" + id + "/publishers/" + hex.EncodeToString(owner) + "/" + ownerSession)
+	if w := relayCheck(ownerGrant); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	if w := call("POST", "/streams/"+id+"/publishing", token, ownerBody); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	for _, path := range []string{"/streams/" + id + "/participants", "/public/streams/" + id} {
+		w := call("GET", path, token, "")
+		if w.Code != 200 || strings.Contains(w.Body.String(), strings.Repeat("a2", 16)) || !strings.Contains(w.Body.String(), ownerSession) || !strings.Contains(w.Body.String(), `"publishingState":"disconnected"`) {
+			t.Fatal("expiry projection or independent publisher", w.Code, w.Body.String())
+		}
+	}
+	if w := relayCheck(s.publisherCredential("mitemau/streams/" + id + "/publishers/" + hex.EncodeToString(other) + "/" + strings.Repeat("a2", 16))); w.Code != 403 {
+		t.Fatal("expired session revived", w.Code)
+	}
+	if err := s.cleanupPublishers(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	var activeParticipants int
+	if err := db.QueryRow("SELECT state FROM live_streams WHERE id=?", raw).Scan(&state); err != nil || state != "live" {
+		t.Fatal("loss ended stream", state, err)
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM stream_participants WHERE stream_id=? AND left_at IS NULL", raw).Scan(&activeParticipants); err != nil || activeParticipants != 2 {
+		t.Fatal("loss removed participation", activeParticipants, err)
+	}
+	reconnectSession := strings.Repeat("b2", 16)
+	reconnectBody := `{"sessionId":"` + reconnectSession + `"}`
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+reconnectSession+`","prepare":true}`); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, reconnectBody); w.Code != 409 {
+		t.Fatal("unconnected Relay advertised", w.Code)
+	}
+	reconnectGrant := s.publisherCredential("mitemau/streams/" + id + "/publishers/" + hex.EncodeToString(other) + "/" + reconnectSession)
+	if w := relayCheck(reconnectGrant); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, reconnectBody); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	// Old prepared and old active sessions cannot replace this new publication.
+	for _, oldSession := range []string{strings.Repeat("a3", 16), strings.Repeat("a4", 16), strings.Repeat("a2", 16)} {
+		if w := relayCheck(s.publisherCredential("mitemau/streams/" + id + "/publishers/" + hex.EncodeToString(other) + "/" + oldSession)); w.Code != 403 {
+			t.Fatal("old grant survived replacement", w.Code)
+		}
+		if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+oldSession+`"}`); w.Code != 409 {
+			t.Fatal("late start replaced new session", w.Code)
+		}
+		if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+oldSession+`","stop":true,"disconnected":true}`); w.Code != 200 {
+			t.Fatal(w.Body.String())
+		}
+	}
+	w := call("GET", "/public/streams/"+id, "", "")
+	if !strings.Contains(w.Body.String(), reconnectSession) || !strings.Contains(w.Body.String(), ownerSession) {
+		t.Fatal("old events affected current publishers", w.Body.String())
+	}
+	// Creator connection loss also leaves the stream live and the guest intact.
+	clock = clock.Add(14 * time.Second)
+	if w := relayCheck(reconnectGrant); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	clock = clock.Add(2 * time.Second)
+	if err := s.cleanupPublishers(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	w = call("GET", "/public/streams/"+id, "", "")
+	if w.Code != 200 || strings.Contains(w.Body.String(), ownerSession) || !strings.Contains(w.Body.String(), reconnectSession) {
+		t.Fatal("creator loss affected guest", w.Code, w.Body.String())
+	}
+
+	// An explicit camera stop differs from loss, and a reported closure is immediate.
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+reconnectSession+`","stop":true}`); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	var publishingState string
+	if err := db.QueryRow("SELECT publishing_state FROM stream_participants WHERE stream_id=? AND account_id=?", raw, other).Scan(&publishingState); err != nil || publishingState != "stopped" {
+		t.Fatal("normal stop classified as loss", publishingState, err)
+	}
+	immediateSession := strings.Repeat("b3", 16)
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+immediateSession+`","prepare":true}`); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	immediateGrant := s.publisherCredential("mitemau/streams/" + id + "/publishers/" + hex.EncodeToString(other) + "/" + immediateSession)
+	if w := relayCheck(immediateGrant); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+immediateSession+`"}`); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+immediateSession+`","stop":true,"disconnected":true}`); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	if err := db.QueryRow("SELECT publishing_state FROM stream_participants WHERE stream_id=? AND account_id=?", raw, other).Scan(&publishingState); err != nil || publishingState != "disconnected" {
+		t.Fatal("reported loss classified as stop", publishingState, err)
+	}
+	// Prepare a fresh connected grant to exercise the exact expiration boundary.
+	boundarySession := strings.Repeat("b4", 16)
+	if w := call("POST", "/streams/"+id+"/publishing", otherToken, `{"sessionId":"`+boundarySession+`","prepare":true}`); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	boundaryGrant := s.publisherCredential("mitemau/streams/" + id + "/publishers/" + hex.EncodeToString(other) + "/" + boundarySession)
+	if w := relayCheck(boundaryGrant); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	// Expiry at the exact lease boundary is denied.
+	clock = clock.Add(publisherLease)
+	if w := relayCheck(boundaryGrant); w.Code != 403 {
+		t.Fatal("boundary lease revived", w.Code)
+	}
+	v.now = func() time.Time { return clock }
 	for i := 0; i < 2; i++ {
 		if w := call("POST", "/streams/"+id+"/end", token, "{}"); w.Code != 200 {
 			t.Fatal(w.Code, w.Body.String())
@@ -258,7 +389,7 @@ func TestStreamsMySQL(t *testing.T) {
 		t.Fatal("joined ended stream", w.Code)
 	}
 	var list []liveStream
-	w := call("GET", "/account/streams", otherToken, "")
+	w = call("GET", "/account/streams", otherToken, "")
 	if err = json.Unmarshal(w.Body.Bytes(), &list); err != nil || len(list) != 1 || list[0].State != "live" {
 		t.Fatal("independent stream changed", w.Body.String())
 	}
