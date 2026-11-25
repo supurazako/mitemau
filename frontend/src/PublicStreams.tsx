@@ -4,7 +4,7 @@ import { AppLink } from "./AppLink";
 
 type PublicStream = { id: string; creatorId: string; title: string };
 type LiveListing = PublicStream & { watchAccountId: string | null };
-type Participant = { accountId: string; namespace: string | null };
+type Participant = { accountId: string; namespace: string | null; publishingState: "stopped" | "publishing" | "disconnected" };
 type StreamDetail = { stream: PublicStream; participants: Participant[] };
 type UserStream = { accountId: string; stream: PublicStream | null };
 
@@ -104,7 +104,7 @@ function StreamPlayback({ streamID }: { streamID: string }) {
         <h3><AppLink href={`/${participant.accountId}`}>Participant {participant.accountId.slice(0, 12)}</AppLink></h3>
         {participant.namespace
           ? <CameraViewer key={participant.namespace} initialNamespace={participant.namespace} />
-          : <p role="status">Not publishing</p>}
+          : <p role="status">{participant.publishingState === "disconnected" ? "Connection lost. Waiting for the participant to reconnect." : "Not publishing"}</p>}
       </section>)}
     </>}
   </div>;

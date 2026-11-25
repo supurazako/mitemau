@@ -17,7 +17,9 @@ export default function RelayConnection({ streamID }: { streamID: string }) {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      void registrationRef.current?.stop().catch(console.error);
+      const registration = registrationRef.current;
+      registrationRef.current = null;
+      void registration?.stop().catch(console.error);
       const client = clientRef.current;
       clientRef.current = null;
       void client?.disconnect().catch(console.error);
@@ -43,15 +45,15 @@ export default function RelayConnection({ streamID }: { streamID: string }) {
         TEST_RELAY_URL,
         () => {
           ended = true;
-          if (version !== connectionVersion.current) return;
+          if (version !== connectionVersion.current || registrationRef.current !== registration) return;
           clientRef.current = null;
           registrationRef.current = null;
           if (mountedRef.current) {
             setConnectedRelay(null);
-            setStatus("Disconnected");
+            setStatus("Connection lost. Connect again to resume sending.");
             setPublishing(null);
           }
-          void registration.stop().catch(console.error);
+          void registration.stop(true).catch(console.error);
         },
         prepared.token,
       );

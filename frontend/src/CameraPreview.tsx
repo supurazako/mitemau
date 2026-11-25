@@ -48,9 +48,8 @@ export default function CameraPreview({ relay, publishing, onPublishingStopped }
       audioRef.current = null;
       void audio?.stop().catch(console.error);
 
-      const registration = registrationRef.current;
+      // RelayConnection owns session revocation, including unexpected closure.
       registrationRef.current = null;
-      void registration?.stop().catch(console.error);
 
       const publication = publicationRef.current;
       publicationRef.current = null;
