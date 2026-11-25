@@ -1,7 +1,7 @@
 import ScreenViewer from "./ScreenViewer";
 import type { RelaySession } from "./lib/moq";
 import type { PlaybackTimeline } from "./lib/mediaTiming";
-import { FullTrackName } from "moqtail";
+import { FullTrackName, LOCProperties, VideoConfig, VideoFrameMarking } from "moqtail";
 import { useEffect, useRef, useState } from "react";
 import { connectRelay, TEST_RELAY_URL } from "./lib/moq";
 import { createAudioPlayback } from "./lib/audioPlayback";
@@ -72,7 +72,9 @@ export default function CameraViewer({ initialNamespace = "" }: { initialNamespa
       await relay.ready;
       if (lifecycle.stopped) return;
       setScreenSession({ relay, namespace: namespace.trim(), timeline });
+      console.info("[camera watch] subscribing", { namespace: namespace.trim() });
       const subscription = await relay.subscribeMedia(name);
+      console.info("[camera watch] subscribed", { namespace: namespace.trim() });
       if (lifecycle.stopped) return;
 
       const audioName = FullTrackName.tryNew(namespace.trim(), "audio");
@@ -98,7 +100,9 @@ export default function CameraViewer({ initialNamespace = "" }: { initialNamespa
           console.error("Camera decode failed", error);
           lifecycle.finish("Decoding failed");
         },
+        () => { if (!lifecycle.stopped) setStatus("Waiting for audio timing"); },
       );
+      let received = 0;
       const reader = subscription.stream.getReader();
       try {
         while (!lifecycle.stopped) {
@@ -106,6 +110,16 @@ export default function CameraViewer({ initialNamespace = "" }: { initialNamespa
           if (lifecycle.stopped) return;
           if (done) {
             break;
+          }
+          received++;
+          if (received === 1 || value.objectId === 0n) {
+            const properties = value.properties ? LOCProperties.fromKeyValuePairs(value.properties) : [];
+            console.info("[camera watch] object received", {
+              groupId: String(value.groupId), objectId: String(value.objectId),
+              keyframe: properties.some((p) => p instanceof VideoFrameMarking && p.independent),
+              hasConfig: properties.some((p) => p instanceof VideoConfig),
+              bytes: value.payload?.byteLength,
+            });
           }
           decoder.push(value);
         }

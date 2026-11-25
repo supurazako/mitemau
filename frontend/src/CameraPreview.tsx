@@ -110,12 +110,11 @@ export default function CameraPreview({ relay, publishing, onPublishingStopped }
         const object = buildObject(chunk, metadata, videoTime.translate(chunk.timestamp));
         if (object) {
           publication?.write(object);
-          console.debug("Camera MoQ Object", {
-            groupId: object.groupId,
-            objectId: object.objectId,
-            type: chunk.type,
-            bytes: object.payload?.byteLength,
+          if (chunk.type === "key") console.info("[camera publish] keyframe queued", {
+            namespace, groupId: String(object.groupId), bytes: object.payload?.byteLength,
           });
+        } else if (chunk.type === "key") {
+          console.warn("[camera publish] keyframe omitted: missing AVC configuration");
         }
       }, videoTime.observe);
       encodingRef.current = session;

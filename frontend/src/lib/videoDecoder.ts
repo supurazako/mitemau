@@ -8,6 +8,7 @@ export function createCameraDecoder(
   timeline: PlaybackTimeline,
   onFrame: () => void,
   onError: (error: DOMException) => void,
+  onWaitingForAudio?: () => void,
 ) {
   const drawingContext = canvas.getContext("2d");
   if (!drawingContext) throw new Error("Could not initialize the canvas");
@@ -43,8 +44,15 @@ export function createCameraDecoder(
     else finishDrain?.();
   }
 
+  let receivedDecodedFrame = false;
   const decoder = new VideoDecoder({
     output(frame) {
+      if (!receivedDecodedFrame) {
+        receivedDecodedFrame = true;
+        const waitingForAudio = timeline.presentationTime(frame.timestamp) === undefined;
+        console.info("[video decode] first frame decoded", { waitingForAudio });
+        if (waitingForAudio) onWaitingForAudio?.();
+      }
       frames.push(frame);
       // Bound the queue while waiting for an audio anchor or a visible tab.
       if (frames.length > 12) frames.shift()?.close();
