@@ -15,7 +15,7 @@ The Relay runs on its own Debian VM using Docker Engine and Docker Compose. This
 
 Apply API migration `000012` before starting the new API. Set `RELAY_AUTH_KEY` to the same 32-byte hex secret in the API environment and in `/opt/mitemau/deploy/relay/.env` on the Relay VM. Generate it with `openssl rand -hex 32`. Set `RELAY_AUTH_URL` in the Relay environment to the API's HTTPS `/relay/authorize` endpoint. Loopback HTTP is supported for local verification.
 
-Restrict the environment file to its operator. The key authenticates Relay requests to the API and derives opaque publisher credentials. Keep it out of the frontend and logs. A key rotation requires restarting both services and reconnecting publishers with new sending sessions.
+Restrict the environment file to its operator. The key authenticates Relay requests to the API and derives opaque publisher credentials. Keep it out of the frontend and logs. Authorization also verifies the credential against the current key, so rotating the key invalidates earlier credentials even while their database grants remain active. A key rotation requires restarting both services and reconnecting publishers with new sending sessions.
 
 From a checkout at `/opt/mitemau`, build the custom image and install the service and certificate-sync script.
 

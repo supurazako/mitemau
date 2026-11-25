@@ -52,5 +52,9 @@ func (s *broadcasterServer) authorizeRelay(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	namespace := "mitemau/streams/" + hex.EncodeToString(stream) + "/publishers/" + hex.EncodeToString(account) + "/" + hex.EncodeToString(session)
+	if subtle.ConstantTimeCompare([]byte(input.Token), []byte(s.publisherCredential(namespace))) != 1 {
+		problem(w, 403, "Publishing permission denied")
+		return
+	}
 	writeJSON(w, 200, map[string]any{"namespace": namespace, "leaseSeconds": 15})
 }

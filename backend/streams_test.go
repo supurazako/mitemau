@@ -151,6 +151,12 @@ func TestStreamsMySQL(t *testing.T) {
 	if w := relayCheck(grantToken); w.Code != 200 {
 		t.Fatal("authorized relay", w.Code, w.Body.String())
 	}
+	previousRelayKey := s.relayAuthKey
+	s.relayAuthKey = bytes.Repeat([]byte{0x72}, 32)
+	if w := relayCheck(grantToken); w.Code != 403 {
+		t.Fatal("key rotation accepted an old publishing credential", w.Code)
+	}
+	s.relayAuthKey = previousRelayKey
 	if _, err = db.Exec("UPDATE broadcaster_applications SET approved_at=NULL WHERE account_id=?", other); err != nil {
 		t.Fatal(err)
 	}
