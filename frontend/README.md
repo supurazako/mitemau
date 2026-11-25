@@ -33,3 +33,9 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+## Local MOQtail patch
+
+The client stays pinned to `moqtail@0.16.0`. `patches/moqtail+0.16.0.patch` fixes a sending-side completion callback retained after a viewer cancels its subscription. Without the fix, subsequently stopping a camera or shared screen attempts to send PUBLISH_DONE on a closed request and produces an unhandled rejection. The patch removes the callback on cancellation, makes completion idempotent, and handles a peer closing during completion.
+
+`npm ci` applies the patch through `postinstall` and fails if it cannot be applied. Both ESM and CommonJS builds are patched. When updating MOQtail, check whether upstream includes the fix and run `test/moqtailPublication.test.ts` plus browser navigation and media-stop tests before removing or updating the patch.

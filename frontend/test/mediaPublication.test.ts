@@ -6,6 +6,8 @@ import { connectRelay } from "../src/lib/moq";
 const relay = vi.hoisted(() => ({
   disconnect: vi.fn(async () => {}),
   init: vi.fn(async () => {}),
+  subscribe: vi.fn(async () => ({ requestId: 1n, stream: new ReadableStream() })),
+  unsubscribe: vi.fn(async () => {}),
   on: vi.fn(),
   addOrUpdateTrack: vi.fn<(track: Track) => void>(),
   removeTrack: vi.fn<(track: Track) => void>(),
@@ -79,5 +81,24 @@ test("screen cleanup after disconnect never calls a destroyed client", async () 
   } finally {
     relay.removeTrack.mockReset();
     relay.unpublishNamespace.mockReset();
+  }
+});
+
+
+test("subscription cleanup after connection closure does not call a destroyed client", async () => {
+  const session = connectRelay("https://relay.example", () => {});
+  await session.ready;
+  const subscription = await session.subscribeMedia(FullTrackName.tryNew("test/viewer", "camera"));
+  await subscription.unsubscribe();
+  expect(relay.unsubscribe).toHaveBeenCalledWith(1n);
+  relay.unsubscribe.mockClear();
+
+  await session.disconnect();
+  relay.unsubscribe.mockImplementation(async () => { throw new Error("Client destroyed"); });
+  try {
+    await expect(subscription.unsubscribe()).resolves.toBeUndefined();
+    expect(relay.unsubscribe).not.toHaveBeenCalled();
+  } finally {
+    relay.unsubscribe.mockReset();
   }
 });

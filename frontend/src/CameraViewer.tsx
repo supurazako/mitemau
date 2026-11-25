@@ -21,7 +21,19 @@ export default function CameraViewer({ initialNamespace = "" }: { initialNamespa
   } | null>(null);
   const [watching, setWatching] = useState(false);
 
-  useEffect(() => () => stopRef.current?.(), []);
+  useEffect(() => {
+    function leavePage() {
+      stopRef.current?.();
+      setScreenSession(null);
+      setWatching(false);
+      setStatus("Stopped");
+    }
+    window.addEventListener("pagehide", leavePage);
+    return () => {
+      window.removeEventListener("pagehide", leavePage);
+      stopRef.current?.();
+    };
+  }, []);
 
   async function watch() {
     const canvas = canvasRef.current;
@@ -50,19 +62,12 @@ export default function CameraViewer({ initialNamespace = "" }: { initialNamespa
       const relay = connectRelay(TEST_RELAY_URL, () => lifecycle.finish("Disconnected"));
       let decoder: ReturnType<typeof createCameraDecoder> | undefined;
       let audio: ReturnType<typeof createAudioPlayback> | undefined;
-      let unsubscribeAudio: (() => Promise<void>) | undefined;
-      let unsubscribe: (() => Promise<void>) | undefined;
       cleanup = () => {
         decoder?.close();
         audio?.stop();
         void context.close().catch(console.error);
-        void (async () => {
-          try {
-            await Promise.allSettled([unsubscribe?.(), unsubscribeAudio?.()]);
-          } finally {
-            await relay.disconnect();
-          }
-        })().catch(console.error);
+        // This viewer owns the connection, so closing it releases every track.
+        void relay.disconnect().catch(console.error);
       };
       await relay.ready;
       if (lifecycle.stopped) return;
@@ -70,18 +75,15 @@ export default function CameraViewer({ initialNamespace = "" }: { initialNamespa
       const subscription = await relay.subscribeMedia(name);
       if (lifecycle.stopped) return;
 
-      unsubscribe = subscription.unsubscribe;
       const audioName = FullTrackName.tryNew(namespace.trim(), "audio");
       void (async () => {
         const subscription = await relay.subscribeMedia(audioName);
         if (lifecycle.stopped) return;
-        unsubscribeAudio = subscription.unsubscribe;
         audio = createAudioPlayback(context, timeline, (error) => {
           console.error("Microphone playback failed", error);
           lifecycle.finish("Could not play audio");
         });
         await audio.play(subscription.stream);
-        unsubscribeAudio = undefined;
         lifecycle.trackEnded("audio");
       })().catch((error) => {
         console.error("Microphone subscription failed", error);
@@ -103,7 +105,6 @@ export default function CameraViewer({ initialNamespace = "" }: { initialNamespa
           const { value, done } = await reader.read();
           if (lifecycle.stopped) return;
           if (done) {
-            unsubscribe = undefined;
             break;
           }
           decoder.push(value);
@@ -123,16 +124,16 @@ export default function CameraViewer({ initialNamespace = "" }: { initialNamespa
 
   return (
     <section>
-      <h2>Watch camera</h2>
+      {!initialNamespace && <h2>Watch camera</h2>}
       <form onSubmit={(event) => {
         event.preventDefault();
         void watch();
       }}>
-        <label>
+        {!initialNamespace && <label>
           Track namespace
           <input value={namespace} onChange={(event) => setNamespace(event.target.value)}
             disabled={watching} required />
-        </label>
+        </label>}
         <button disabled={watching}>Watch</button>
         <button type="button" disabled={!watching} onClick={() => {
           stopRef.current?.();

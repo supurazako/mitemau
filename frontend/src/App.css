@@ -23,3 +23,58 @@
 }
 .registration p { margin-block: 1rem; overflow-wrap: anywhere; }
 .registration [role="alert"] { color: var(--text-h); border-left: 3px solid var(--accent); padding-left: .75rem; }
+
+.site-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1.25rem 2rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.site-header nav { display: flex; flex-wrap: wrap; gap: 1rem; }
+.site-name { font-size: 1.35rem; font-weight: 650; text-decoration: none; }
+a { color: var(--accent); }
+.public-page { padding: 1.5rem 2rem 3rem; text-align: left; }
+.public-page h1 { font-size: 2rem; letter-spacing: normal; line-height: 1.3; }
+.public-page p { margin-block: 1rem; }
+.public-page button {
+  font: inherit;
+  padding: .6rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: .4rem;
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+.public-page button:disabled { cursor: default; opacity: .55; }
+.public-page button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.public-page [role="alert"] { border-left: 3px solid var(--accent); padding-left: 1rem; }
+.live-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 1.5rem; }
+.live-card { border: 1px solid var(--border); border-radius: .6rem; overflow: hidden; }
+.live-card > a:first-child { text-decoration: none; color: var(--text-h); }
+.default-thumbnail {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  background: var(--accent-bg);
+  border-bottom: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 1.6rem;
+  font-weight: 650;
+}
+.live-card h2 { font-size: 1.2rem; margin: 1rem; overflow-wrap: anywhere; }
+.user-link { display: inline-block; margin: 0 1rem 1rem; }
+.account-id { overflow-wrap: anywhere; }
+.participant { padding-block: 1.5rem; border-top: 1px solid var(--border); }
+.participant > h3 { font-size: 1.1rem; margin-bottom: 1rem; }
+.public-watch canvas { display: block; max-width: 100%; height: auto; margin-block: 1rem; background: #08060d; }
+@media (max-width: 640px) {
+  .site-header, .public-page { padding-inline: 1rem; }
+}
+
+.site-header [aria-current="page"] { color: var(--text-h); font-weight: 600; }
+
+.stream-unavailable { padding-inline: 1rem; }
