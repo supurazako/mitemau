@@ -76,3 +76,5 @@ a { color: var(--accent); }
 }
 
 .site-header [aria-current="page"] { color: var(--text-h); font-weight: 600; }
+
+.stream-unavailable { padding-inline: 1rem; }

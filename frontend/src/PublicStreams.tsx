@@ -3,6 +3,7 @@ import CameraViewer from "./CameraViewer";
 import { AppLink } from "./AppLink";
 
 type PublicStream = { id: string; creatorId: string; title: string };
+type LiveListing = PublicStream & { watchAccountId: string | null };
 type Participant = { accountId: string; namespace: string | null };
 type StreamDetail = { stream: PublicStream; participants: Participant[] };
 type UserStream = { accountId: string; stream: PublicStream | null };
@@ -67,20 +68,25 @@ function LoadError({ message, reload }: { message: string; reload: () => void })
 }
 
 export function LiveList() {
-  const resource = usePublicResource<PublicStream[]>("/api/public/streams");
+  const resource = usePublicResource<LiveListing[]>("/api/public/streams");
   return <main className="public-page">
     <h1>Live streams</h1>
     {resource.loading && <p role="status">Loading live streams…</p>}
     <LoadError message={resource.error || (resource.unavailable ? "Live streams are unavailable." : "")} reload={resource.reload} />
     {resource.data?.length === 0 && <p role="status">No streams are live right now.</p>}
     <div className="live-grid">
-      {resource.data?.map((stream) => <article className="live-card" key={stream.id}>
-        <AppLink href={`/${stream.creatorId}`}>
+      {resource.data?.map((stream) => {
+        const preview = <>
           <div className="default-thumbnail" aria-hidden="true"><span>Mitemau</span></div>
           <h2>{stream.title}</h2>
-        </AppLink>
-        <AppLink className="user-link" href={`/${stream.creatorId}`}>Creator {stream.creatorId.slice(0, 12)}</AppLink>
-      </article>)}
+        </>;
+        return <article className="live-card" key={stream.id}>
+          {stream.watchAccountId
+            ? <AppLink href={`/${stream.watchAccountId}`}>{preview}</AppLink>
+            : <div>{preview}<p className="stream-unavailable" role="status">No participants are available.</p></div>}
+          <AppLink className="user-link" href={`/${stream.creatorId}`}>Creator {stream.creatorId.slice(0, 12)}</AppLink>
+        </article>;
+      })}
     </div>
   </main>;
 }

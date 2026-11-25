@@ -2,12 +2,12 @@ import "./App.css";
 import AccountPage from "./AccountPage";
 import { useSyncExternalStore } from "react";
 import { AppLink } from "./AppLink";
+import { LiveList, UserPage } from "./PublicStreams";
 
 function subscribeToPath(onChange: () => void) {
   window.addEventListener("popstate", onChange);
   return () => window.removeEventListener("popstate", onChange);
 }
-import { LiveList, UserPage } from "./PublicStreams";
 
 export default function App() {
   const path = useSyncExternalStore(subscribeToPath, () => window.location.pathname).replace(/\/$/, "") || "/";

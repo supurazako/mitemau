@@ -12,6 +12,11 @@ type publicStream struct {
 	Title     string `json:"title"`
 }
 
+type publicStreamListing struct {
+	publicStream
+	WatchAccountID *string `json:"watchAccountId"`
+}
+
 func (s *broadcasterServer) publicStreamRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /public/streams", s.publicStreams)
 	mux.HandleFunc("GET /public/streams/{id}", s.publicStream)
@@ -20,22 +25,36 @@ func (s *broadcasterServer) publicStreamRoutes(mux *http.ServeMux) {
 
 func (s *broadcasterServer) publicStreams(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	rows, err := s.p.verification.db.QueryContext(r.Context(), "SELECT id,creator_id,title FROM live_streams WHERE state='live' ORDER BY started_at DESC,id")
+	// A card must open a user page that currently resolves to this stream.
+	// Keep the same current-stream ordering as publicUser below.
+	rows, err := s.p.verification.db.QueryContext(r.Context(), `SELECT s.id,s.creator_id,s.title,(
+ SELECT candidate.account_id FROM stream_participants candidate
+ WHERE candidate.stream_id=s.id AND candidate.left_at IS NULL AND s.id=(
+  SELECT live.id FROM stream_participants recent JOIN live_streams live ON live.id=recent.stream_id
+  WHERE recent.account_id=candidate.account_id AND recent.left_at IS NULL AND live.state='live'
+  ORDER BY recent.joined_at DESC,live.started_at DESC,live.id DESC LIMIT 1
+ )
+ ORDER BY (candidate.account_id=s.creator_id) DESC,candidate.joined_at,candidate.account_id LIMIT 1
+ ) FROM live_streams s WHERE s.state='live' ORDER BY s.started_at DESC,s.id`)
 	if err != nil {
 		problem(w, 503, "Could not load live streams")
 		return
 	}
 	defer rows.Close()
-	streams := []publicStream{}
+	streams := []publicStreamListing{}
 	for rows.Next() {
-		var id, creator []byte
-		var item publicStream
-		if err = rows.Scan(&id, &creator, &item.Title); err != nil {
+		var id, creator, watchAccount []byte
+		var item publicStreamListing
+		if err = rows.Scan(&id, &creator, &item.Title, &watchAccount); err != nil {
 			problem(w, 503, "Could not load live streams")
 			return
 		}
 		item.ID = hex.EncodeToString(id)
 		item.CreatorID = hex.EncodeToString(creator)
+		if watchAccount != nil {
+			encoded := hex.EncodeToString(watchAccount)
+			item.WatchAccountID = &encoded
+		}
 		streams = append(streams, item)
 	}
 	if rows.Err() != nil {

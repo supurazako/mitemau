@@ -96,7 +96,7 @@ func TestPublicStreamsMySQL(t *testing.T) {
 		}
 	}
 	list := get("/public/streams")
-	var streams []publicStream
+	var streams []publicStreamListing
 	if list.Code != 200 || json.Unmarshal(list.Body.Bytes(), &streams) != nil || len(streams) != 2 {
 		t.Fatal("live list", list.Code, list.Body.String())
 	}
@@ -105,6 +105,24 @@ func TestPublicStreamsMySQL(t *testing.T) {
 	}
 	if list.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("live state was cacheable")
+	}
+	for _, listed := range streams {
+		if listed.ID == hex.EncodeToString(second) {
+			if listed.WatchAccountID != nil {
+				t.Fatal("overlapping old stream linked to a different stream")
+			}
+			continue
+		}
+		if listed.WatchAccountID == nil || *listed.WatchAccountID != hex.EncodeToString(owner) {
+			t.Fatal("creator was not the preferred watch destination")
+		}
+		response := get("/public/users/" + *listed.WatchAccountID)
+		var destination struct {
+			Stream *publicStream `json:"stream"`
+		}
+		if json.Unmarshal(response.Body.Bytes(), &destination) != nil || destination.Stream == nil || destination.Stream.ID != listed.ID {
+			t.Fatal("live-list watch link opens a different or offline stream", listed.ID, response.Body.String())
+		}
 	}
 	for _, account := range [][]byte{owner, guest} {
 		checkUser(account, hex.EncodeToString(first))
@@ -137,6 +155,23 @@ func TestPublicStreamsMySQL(t *testing.T) {
 			t.Fatalf("%s returned %d", path, response.Code)
 		}
 	}
+	// A creator can leave without ending the guests' stream.
+	if _, err = db.Exec("UPDATE stream_participants SET left_at=? WHERE stream_id=? AND account_id=?", now, first, owner); err != nil {
+		t.Fatal(err)
+	}
+	list = get("/public/streams")
+	if list.Code != 200 || json.Unmarshal(list.Body.Bytes(), &streams) != nil || len(streams) != 2 {
+		t.Fatal("creator departure changed the live list", list.Code, list.Body.String())
+	}
+	for _, listed := range streams {
+		if listed.ID == hex.EncodeToString(first) {
+			if listed.WatchAccountID == nil || *listed.WatchAccountID != hex.EncodeToString(guest) {
+				t.Fatal("creator departure broke the watch link", list.Body.String())
+			}
+			checkUser(guest, listed.ID)
+		}
+	}
+	checkUser(owner, "")
 	if _, err = db.Exec("UPDATE live_streams SET state='ended' WHERE id=?", first); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +181,7 @@ func TestPublicStreamsMySQL(t *testing.T) {
 	checkUser(owner, "")
 	checkUser(guest, hex.EncodeToString(second))
 	list = get("/public/streams")
-	if json.Unmarshal(list.Body.Bytes(), &streams) != nil || len(streams) != 1 || streams[0].ID != hex.EncodeToString(second) {
+	if json.Unmarshal(list.Body.Bytes(), &streams) != nil || len(streams) != 1 || streams[0].ID != hex.EncodeToString(second) || streams[0].WatchAccountID == nil || *streams[0].WatchAccountID != hex.EncodeToString(guest) {
 		t.Fatal("ended stream remained listed", list.Body.String())
 	}
 	if _, err = db.Exec("UPDATE live_streams SET state='ended' WHERE id=?", second); err != nil {
@@ -154,5 +189,12 @@ func TestPublicStreamsMySQL(t *testing.T) {
 	}
 	if response := get("/public/streams"); response.Code != 200 || strings.TrimSpace(response.Body.String()) != "[]" {
 		t.Fatal("empty live list", response.Body.String())
+	}
+	if _, err = db.Exec("UPDATE live_streams SET state='live' WHERE id=?", ready); err != nil {
+		t.Fatal(err)
+	}
+	list = get("/public/streams")
+	if list.Code != 200 || json.Unmarshal(list.Body.Bytes(), &streams) != nil || len(streams) != 1 || streams[0].ID != hex.EncodeToString(ready) || streams[0].WatchAccountID != nil {
+		t.Fatal("live stream without participants has an invalid watch destination", list.Body.String())
 	}
 }
