@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"log"
 	"net"
 	"net/http"
@@ -73,7 +74,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	(&broadcasterServer{p: passkeys, staffIDs: staffIDs}).routes(mux)
+	relayKey, err := hex.DecodeString(os.Getenv("RELAY_AUTH_KEY"))
+	if err != nil || len(relayKey) != 32 {
+		log.Fatal("RELAY_AUTH_KEY must contain 32 random bytes encoded as hex")
+	}
+	(&broadcasterServer{p: passkeys, staffIDs: staffIDs, relayAuthKey: relayKey}).routes(mux)
 	verification.registeredEmail = passkeys.registeredEmail
 	go verification.runCleanup(context.Background())
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {

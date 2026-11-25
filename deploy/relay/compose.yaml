@@ -2,9 +2,13 @@ name: moqtail-relay
 
 services:
   relay:
-    image: ghcr.io/moqtail/relay@sha256:c68aa7f28ad51014b8f081386cc0d5bb0816f8ca8be2c98656d9a80d8ee93d21
+    image: mitemau-relay:bafde0a-auth-v1
+    build: .
     container_name: moqtail-relay
     pull_policy: never
+    environment:
+      RELAY_AUTH_URL: ${RELAY_AUTH_URL:?Set RELAY_AUTH_URL}
+      RELAY_AUTH_KEY: ${RELAY_AUTH_KEY:?Set RELAY_AUTH_KEY}
     user: "65532:65532"
     userns_mode: host
     read_only: true

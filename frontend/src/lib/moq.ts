@@ -1,4 +1,4 @@
-import { GroupOrder, LocationFilter, LocationFilterType, RequestError } from "moqtail";
+import { AuthorizationToken, SetupOptions, GroupOrder, LocationFilter, LocationFilterType, RequestError } from "moqtail";
 import type { FullTrackName, MoqtObject } from "moqtail";
 import { LiveTrackSource, MOQtailClient } from "moqtail/client";
 
@@ -24,8 +24,12 @@ export type RelaySession = {
 export function connectRelay(
   url: string,
   onDisconnected: () => void,
+  token?: string,
 ): RelaySession {
-  const client = new MOQtailClient({ url });
+  const setupOptions = token
+    ? new SetupOptions().addAuthorizationToken(AuthorizationToken.newRegister(1, 0, new TextEncoder().encode(token)))
+    : undefined;
+  const client = new MOQtailClient({ url, setupOptions });
   let closed = false;
   client.on("sessionterminated", () => {
     closed = true;

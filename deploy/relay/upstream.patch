@@ -1,0 +1,817 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index c2aa6a4..6bae8d9 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -117,6 +117,12 @@ dependencies = [
+  "pin-project-lite",
+ ]
+ 
++[[package]]
++name = "atomic-waker"
++version = "1.1.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
++
+ [[package]]
+ name = "autocfg"
+ version = "1.5.1"
+@@ -129,6 +135,12 @@ version = "0.22.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+ 
++[[package]]
++name = "base64"
++version = "0.23.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
++
+ [[package]]
+ name = "bit-vec"
+ version = "0.9.1"
+@@ -428,6 +440,15 @@ dependencies = [
+  "percent-encoding",
+ ]
+ 
++[[package]]
++name = "futures-channel"
++version = "0.3.34"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b1f9e3d69d39e4862ffed03ed071a76f9a13ba1d9109d355b0f0aa6b15e393c4"
++dependencies = [
++ "futures-core",
++]
++
+ [[package]]
+ name = "futures-core"
+ version = "0.3.34"
+@@ -509,6 +530,45 @@ version = "0.3.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "1a9fcbcc408c5526c3ab80d534e5c86e7967c1fb7aa0a8c76abd1edc27deb877"
+ 
++[[package]]
++name = "http"
++version = "1.5.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "918d3568bebf352712bc2ef3d46a8bcf1a75b373be6539de198e9105cbbf9ce0"
++dependencies = [
++ "bytes",
++ "itoa",
++]
++
++[[package]]
++name = "http-body"
++version = "1.1.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ca2a8f2913ee65f60facd6a5905613afaa448497a0230cc41ce022d93290bc2c"
++dependencies = [
++ "bytes",
++ "http",
++]
++
++[[package]]
++name = "http-body-util"
++version = "0.1.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "23169fe34a5fbcdd3f3862e78fb9b6fccd5f02a6dc6f732547005d45631ce71c"
++dependencies = [
++ "bytes",
++ "futures-core",
++ "http",
++ "http-body",
++ "pin-project-lite",
++]
++
++[[package]]
++name = "httparse"
++version = "1.10.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
++
+ [[package]]
+ name = "hybrid-array"
+ version = "0.4.15"
+@@ -518,6 +578,65 @@ dependencies = [
+  "typenum",
+ ]
+ 
++[[package]]
++name = "hyper"
++version = "1.13.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "229c6ff5584df4c6becbfe00567128bac768c8cd32ebc8a8366bd81ed072e8f3"
++dependencies = [
++ "atomic-waker",
++ "bytes",
++ "futures-core",
++ "http",
++ "http-body",
++ "httparse",
++ "itoa",
++ "pin-project-lite",
++ "smallvec",
++ "tokio",
++ "want",
++]
++
++[[package]]
++name = "hyper-rustls"
++version = "0.27.10"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "dfa8e654703247911e29c23fbeaa261834bd9bb74efba2f9acddc37bfb127f53"
++dependencies = [
++ "http",
++ "hyper",
++ "hyper-util",
++ "rustls",
++ "tokio",
++ "tokio-rustls",
++ "tower-service",
++ "webpki-roots",
++]
++
++[[package]]
++name = "hyper-util"
++version = "0.1.21"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ddc03d96684f9226b8a787cdb71488417b53ab5ea8fdb1dac946cb9431cc8bff"
++dependencies = [
++ "base64 0.23.1",
++ "bytes",
++ "futures-channel",
++ "futures-util",
++ "http",
++ "http-body",
++ "httparse",
++ "hyper",
++ "ipnet",
++ "libc",
++ "percent-encoding",
++ "pin-project-lite",
++ "socket2",
++ "tokio",
++ "tower-service",
++ "tracing",
++]
++
+ [[package]]
+ name = "icu_collections"
+ version = "2.3.0"
+@@ -622,6 +741,12 @@ dependencies = [
+  "icu_properties",
+ ]
+ 
++[[package]]
++name = "ipnet"
++version = "2.12.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "791930b43c0d5973160d90a8f3894509f2b273430f5c5c73b668636d0287c5c0"
++
+ [[package]]
+ name = "is_terminal_polyfill"
+ version = "1.70.2"
+@@ -878,7 +1003,7 @@ version = "3.0.6"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "1d30c53c26bc5b31a98cd02d20f25a7c8567146caf63ed593a9d87b2775291be"
+ dependencies = [
+- "base64",
++ "base64 0.22.1",
+  "serde_core",
+ ]
+ 
+@@ -1073,6 +1198,7 @@ dependencies = [
+  "moqtail",
+  "moqtail-ssts",
+  "once_cell",
++ "reqwest",
+  "serde_json",
+  "socket2",
+  "tokio",
+@@ -1082,6 +1208,44 @@ dependencies = [
+  "wtransport",
+ ]
+ 
++[[package]]
++name = "reqwest"
++version = "0.12.28"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
++dependencies = [
++ "base64 0.22.1",
++ "bytes",
++ "futures-core",
++ "http",
++ "http-body",
++ "http-body-util",
++ "hyper",
++ "hyper-rustls",
++ "hyper-util",
++ "js-sys",
++ "log",
++ "percent-encoding",
++ "pin-project-lite",
++ "quinn",
++ "rustls",
++ "rustls-pki-types",
++ "serde",
++ "serde_json",
++ "serde_urlencoded",
++ "sync_wrapper",
++ "tokio",
++ "tokio-rustls",
++ "tower",
++ "tower-http",
++ "tower-service",
++ "url",
++ "wasm-bindgen",
++ "wasm-bindgen-futures",
++ "web-sys",
++ "webpki-roots",
++]
++
+ [[package]]
+ name = "ring"
+ version = "0.17.14"
+@@ -1164,6 +1328,12 @@ version = "1.0.23"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
+ 
++[[package]]
++name = "ryu"
++version = "1.0.23"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
++
+ [[package]]
+ name = "schannel"
+ version = "0.1.29"
+@@ -1245,6 +1415,18 @@ dependencies = [
+  "zmij",
+ ]
+ 
++[[package]]
++name = "serde_urlencoded"
++version = "0.7.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
++dependencies = [
++ "form_urlencoded",
++ "itoa",
++ "ryu",
++ "serde",
++]
++
+ [[package]]
+ name = "sha2"
+ version = "0.11.0"
+@@ -1349,6 +1531,15 @@ dependencies = [
+  "unicode-ident",
+ ]
+ 
++[[package]]
++name = "sync_wrapper"
++version = "1.0.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
++dependencies = [
++ "futures-core",
++]
++
+ [[package]]
+ name = "synstructure"
+ version = "0.13.2"
+@@ -1480,6 +1671,61 @@ dependencies = [
+  "syn 3.0.6",
+ ]
+ 
++[[package]]
++name = "tokio-rustls"
++version = "0.26.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c9cc2678c2cdd569ef8215e2afd7954ada2ae20b4fdd2c5fe6139a3b02d105db"
++dependencies = [
++ "rustls",
++ "tokio",
++]
++
++[[package]]
++name = "tower"
++version = "0.5.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ebe5ef63511595f1344e2d5cfa636d973292adc0eec1f0ad45fae9f0851ab1d4"
++dependencies = [
++ "futures-core",
++ "futures-util",
++ "pin-project-lite",
++ "sync_wrapper",
++ "tokio",
++ "tower-layer",
++ "tower-service",
++]
++
++[[package]]
++name = "tower-http"
++version = "0.6.11"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4cfcf7e2740e6fc6d4d688b4ef00650406bb94adf4731e43c096c3a19fe40840"
++dependencies = [
++ "bitflags",
++ "bytes",
++ "futures-util",
++ "http",
++ "http-body",
++ "pin-project-lite",
++ "tower",
++ "tower-layer",
++ "tower-service",
++ "url",
++]
++
++[[package]]
++name = "tower-layer"
++version = "0.3.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "121c2a6cda46980bb0fcd1647ffaf6cd3fc79a013de288782836f6df9c48780e"
++
++[[package]]
++name = "tower-service"
++version = "0.3.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
++
+ [[package]]
+ name = "tracing"
+ version = "0.1.44"
+@@ -1554,6 +1800,12 @@ dependencies = [
+  "tracing-log",
+ ]
+ 
++[[package]]
++name = "try-lock"
++version = "0.2.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
++
+ [[package]]
+ name = "typenum"
+ version = "1.20.1"
+@@ -1613,6 +1865,15 @@ version = "0.1.1"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
+ 
++[[package]]
++name = "want"
++version = "0.3.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ec4cdd0dd910afe868b7ef477227d8d538b46b3075031afee8a9f2acb0a2ed0b"
++dependencies = [
++ "try-lock",
++]
++
+ [[package]]
+ name = "wasi"
+ version = "0.11.1+wasi-snapshot-preview1"
+@@ -1632,6 +1893,17 @@ dependencies = [
+  "wasm-bindgen-shared",
+ ]
+ 
++[[package]]
++name = "wasm-bindgen-futures"
++version = "0.4.79"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3cbab34de2d982e9b48e18d216d04c4a6f641066ff19ffb699980f591ee3610e"
++dependencies = [
++ "js-sys",
++ "tokio",
++ "wasm-bindgen",
++]
++
+ [[package]]
+ name = "wasm-bindgen-macro"
+ version = "0.2.129"
+@@ -1664,6 +1936,16 @@ dependencies = [
+  "unicode-ident",
+ ]
+ 
++[[package]]
++name = "web-sys"
++version = "0.3.106"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "88261b9deccee56594c11a3460c462c41f58d148598fe70ad77070126a68aba4"
++dependencies = [
++ "js-sys",
++ "wasm-bindgen",
++]
++
+ [[package]]
+ name = "web-time"
+ version = "1.1.0"
+@@ -1674,6 +1956,15 @@ dependencies = [
+  "wasm-bindgen",
+ ]
+ 
++[[package]]
++name = "webpki-roots"
++version = "1.0.12"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "7265c9301c16a8711c992c2d8da90ee77ef54b1ed51482d6dfeb00dc756b1297"
++dependencies = [
++ "rustls-pki-types",
++]
++
+ [[package]]
+ name = "windows-link"
+ version = "0.2.1"
+diff --git a/apps/relay/Cargo.toml b/apps/relay/Cargo.toml
+index b9102d8..bc58434 100644
+--- a/apps/relay/Cargo.toml
++++ b/apps/relay/Cargo.toml
+@@ -5,6 +5,7 @@ edition = "2024"
+ build="build.rs"
+ 
+ [dependencies]
++reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+ anyhow.workspace = true
+ tracing.workspace = true
+ tracing-subscriber.workspace = true
+diff --git a/apps/relay/build.rs b/apps/relay/build.rs
+index 7a397a6..8685806 100644
+--- a/apps/relay/build.rs
++++ b/apps/relay/build.rs
+@@ -12,16 +12,8 @@
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
+ 
+-use std::process::Command;
+-
+ fn main() {
+-  let commit = Command::new("git")
+-    .args(["rev-parse", "--short", "HEAD"])
+-    .output()
+-    .ok()
+-    .and_then(|output| String::from_utf8(output.stdout).ok())
+-    .map(|s| s.trim().to_string())
+-    .unwrap_or_else(|| "unknown".to_string());
++  let commit = "bafde0a-mitemau-auth-v1";
+ 
+   let version = env!("CARGO_PKG_VERSION");
+   let moqtail_version = format!("moqtail/{version}+{commit}");
+diff --git a/apps/relay/src/server.rs b/apps/relay/src/server.rs
+index 39711ca..3c5e6b7 100644
+--- a/apps/relay/src/server.rs
++++ b/apps/relay/src/server.rs
+@@ -15,6 +15,7 @@
+ mod config;
+ mod logging;
+ mod message_handlers;
++mod publishing_auth;
+ mod requests;
+ mod session;
+ mod ssts;
+@@ -87,6 +88,7 @@ impl Server {
+   }
+ 
+   pub async fn start(&mut self) -> Result<()> {
++    publishing_auth::validate_config();
+     let endpoints = self.app_config.build_quic_endpoints().await?;
+ 
+     info!(
+diff --git a/apps/relay/src/server/message_handlers/publish_handler.rs b/apps/relay/src/server/message_handlers/publish_handler.rs
+index 528f928..c22370f 100644
+--- a/apps/relay/src/server/message_handlers/publish_handler.rs
++++ b/apps/relay/src/server/message_handlers/publish_handler.rs
+@@ -69,8 +69,7 @@ pub async fn handle(
+           .await;
+       }
+ 
+-      // Validate track namespace authorization
+-      // TODO: Implement actual authorization logic
++      // Require the connection's current grant for this exact namespace.
+       let is_authorized = validate_publish_authorization(&m.track_namespace, &client).await;
+ 
+       if !is_authorized {
+@@ -967,18 +966,10 @@ async fn register_ssts_assignment_from_publish_ok(
+ 
+ /// Validates if the client is authorized to publish to the given track namespace
+ async fn validate_publish_authorization(
+-  _track_namespace: &moqtail::model::common::tuple::Tuple,
+-  _client: &Arc<MOQTClient>,
++  track_namespace: &moqtail::model::common::tuple::Tuple,
++  client: &Arc<MOQTClient>,
+ ) -> bool {
+-  // TODO: Implement actual authorization logic
+-  // This could check:
+-  // - Client authentication credentials
+-  // - Track namespace permissions
+-  // - Rate limiting
+-  // - Subscription quotas
+-
+-  // For now, allow all publishes (this should be replaced with actual auth logic)
+-  true
++  client.permits_publishing(track_namespace)
+ }
+ 
+ /// Resolves the track this PUBLISH_DONE ends, then waits for the data streams it
+diff --git a/apps/relay/src/server/message_handlers/publish_namespace_handler.rs b/apps/relay/src/server/message_handlers/publish_namespace_handler.rs
+index 2c7c6c2..8b58b6d 100644
+--- a/apps/relay/src/server/message_handlers/publish_namespace_handler.rs
++++ b/apps/relay/src/server/message_handlers/publish_namespace_handler.rs
+@@ -85,6 +85,16 @@ pub async fn handle(
+ ) -> Result<(), TerminationCode> {
+   match msg {
+     ControlMessage::PublishNamespace(m) => {
++      if !client.permits_publishing(&m.track_namespace) {
++        let err = RequestError::new(
++          RequestErrorCode::Unauthorized,
++          0,
++          ReasonPhrase::try_new("Publishing permission required".to_string()).unwrap(),
++        );
++        return stream_handler
++          .send(&ControlMessage::RequestError(Box::new(err)))
++          .await;
++      }
+       // TODO: the namespace is already announced, return error
+       info!("received PublishNamespace message");
+ 
+diff --git a/apps/relay/src/server/message_handlers/subscribe_handler/upstream.rs b/apps/relay/src/server/message_handlers/subscribe_handler/upstream.rs
+index 28568c2..8ad872c 100644
+--- a/apps/relay/src/server/message_handlers/subscribe_handler/upstream.rs
++++ b/apps/relay/src/server/message_handlers/subscribe_handler/upstream.rs
+@@ -523,6 +523,13 @@ async fn handle_subscribe_ok_message(
+   }
+ 
+   let full_track_name = sub_request.original_subscribe_request.get_full_track_name();
++  if !publisher.permits_publishing(&full_track_name.namespace) {
++    publisher.connection.close(
++      TerminationCode::Unauthorized.to_u32(),
++      b"Publishing permission expired",
++    );
++    return Err(TerminationCode::Unauthorized);
++  }
+ 
+   // The track must already exist (pre-created in Subscribe handler)
+   let track_arc = match context.track_manager.get_track(&full_track_name).await {
+diff --git a/apps/relay/src/server/session.rs b/apps/relay/src/server/session.rs
+index d125c32..fd33325 100644
+--- a/apps/relay/src/server/session.rs
++++ b/apps/relay/src/server/session.rs
+@@ -425,6 +425,10 @@ impl Session {
+                        datagram_obj.track_alias, datagram_obj.group_id, datagram_obj.object_id);
+ 
+                 if let Some(track) = context_clone.track_manager.get_track_by_alias(context_clone.connection_id, datagram_obj.track_alias).await {
++                  if !context_clone.get_client().await.is_some_and(|c| c.permits_publishing(&track.full_track_name.namespace)) {
++                    context_clone.connection.close(TerminationCode::Unauthorized.to_u32(), b"Unauthorized publisher data");
++                    return;
++                  }
+                   if let Err(e) = track.new_datagram(&datagram_obj).await {
+                     error!("Failed to process datagram: {:?}", e);
+                   }
+@@ -562,6 +566,13 @@ impl Session {
+ 
+     loop {
+       let next = stream_handler.next_item().await;
++      if next.1.is_some() && !client.publishing_active() {
++        client.connection.close(
++          TerminationCode::Unauthorized.to_u32(),
++          b"Publishing permission expired",
++        );
++        return Ok(());
++      }
+ 
+       match next {
+         // Only a fetch stream carries these. The relay passes them on to whatever
+@@ -666,6 +677,13 @@ impl Session {
+           };
+ 
+           let track = &current_track.as_ref().unwrap();
++          if !client.permits_publishing(&track.full_track_name.namespace) {
++            client.connection.close(
++              TerminationCode::Unauthorized.to_u32(),
++              b"Unauthorized publisher data",
++            );
++            return Ok(());
++          }
+ 
+           // What a fetch brings in is history, for the cache alone: subscribers get the
+           // live feed.
+@@ -775,6 +793,12 @@ impl Session {
+     let Some(HeaderInfo::Fetch { header, .. }) = handler.get_header_info().await else {
+       return None;
+     };
++    let client = context.get_client().await?;
++    let requests = client.outgoing_fetch_requests.read().await;
++    let request = requests.get(&header.request_id)?;
++    if !client.permits_publishing(&request.fetch_request.get_full_track_name().namespace) {
++      return None;
++    }
+     context.upstream_requests.get_fetch(header.request_id).await
+   }
+ 
+@@ -804,7 +828,7 @@ impl Session {
+   ) -> Result<Arc<MOQTClient>, TerminationCode> {
+     trace!("Negotiating with client...");
+     // The client's control stream MUST begin with SETUP.
+-    let client_setup = match control_stream_handler.read_setup().await {
++    let mut client_setup = match control_stream_handler.read_setup().await {
+       Ok(m) => m,
+       Err(TerminationCode::NoError) => {
+         info!("Client disconnected during negotiation");
+@@ -820,7 +844,13 @@ impl Session {
+     // carries them.
+     client_setup.validate_incoming(SetupSender::Client, context.transport_kind)?;
+ 
+-    utils::print_msg_bytes(&client_setup);
++    let publishing_grant = crate::server::publishing_auth::authenticate(&client_setup).await?;
++    client_setup.setup_options.retain(|option| {
++      !matches!(
++        SetupOption::deserialize(option),
++        Ok(SetupOption::AuthorizationToken { .. })
++      )
++    });
+ 
+     let moqt_implementation_param =
+       SetupOption::new_moqt_implementation(env!("MOQTAIL_VERSION").to_string())
+@@ -852,45 +882,6 @@ impl Session {
+ 
+     let server_setup = Setup::new(setup_options);
+ 
+-    trace!("client setup: {:?}", client_setup);
+-    trace!("server setup: {:?}", server_setup);
+-
+-    // Check for authorization tokens and log them if token logging is enabled
+-    if context.server_config.enable_token_logging {
+-      // Import the necessary types
+-      use moqtail::model::parameter::constant::TokenAliasType;
+-      use moqtail::model::parameter::setup_option::SetupOption;
+-
+-      // Iterate through setup parameters to find authorization tokens
+-      for param in &client_setup.setup_options {
+-        // Try to deserialize as a SetupOption
+-        if let Ok(setup_param) = SetupOption::deserialize(param) {
+-          // Check if it's an AuthorizationToken
+-          if let SetupOption::AuthorizationToken { token } = setup_param
+-            && token.alias_type == TokenAliasType::Register as u64
+-          {
+-            // Get client port number from the connection
+-            let client_port = context.connection.remote_address().port();
+-
+-            info!(
+-              "Authorization token registered: {:?}, port: {:?}",
+-              token, client_port
+-            );
+-
+-            // Log the token information
+-            if let Some(token_value) = token.token_value {
+-              crate::server::logging::token_logger::log_token_registration(
+-                &token_value,
+-                context.connection_id,
+-                client_port,
+-                &context.server_config.token_log_path,
+-              );
+-            }
+-          }
+-        }
+-      }
+-    }
+-
+     let client = MOQTClient::new(
+       context.connection_id,
+       Arc::new(context.connection.clone()),
+@@ -898,6 +889,8 @@ impl Session {
+       context.server_config,
+     );
+     let client = Arc::new(client);
++    *client.publishing_grant.write().unwrap() = publishing_grant;
++    tokio::spawn(crate::server::publishing_auth::monitor(client.clone()));
+     if client.ssts_enabled() {
+       client.clone().start_abr_controller();
+     }
+diff --git a/apps/relay/src/server/session/client.rs b/apps/relay/src/server/session/client.rs
+index 2443215..fdbb544 100644
+--- a/apps/relay/src/server/session/client.rs
++++ b/apps/relay/src/server/session/client.rs
+@@ -108,6 +108,8 @@ pub type ResponseSenderList = Vec<Arc<RwLock<ResponseSenderMap>>>;
+ 
+ #[derive(Debug, Clone)]
+ pub(crate) struct MOQTClient {
++  pub(crate) publishing_grant:
++    Arc<std::sync::RwLock<Option<crate::server::publishing_auth::Grant>>>,
+   pub connection_id: usize,
+   pub transport_kind: TransportKind,
+   pub connection: Arc<TransportConnection>,
+@@ -173,6 +175,22 @@ fn pick_track_alias(mode: TrackAliasMode, relay_track_id: u64, next: &AtomicU64)
+ }
+ 
+ impl MOQTClient {
++  pub(crate) fn publishing_active(&self) -> bool {
++    self
++      .publishing_grant
++      .read()
++      .map(|g| g.as_ref().is_some_and(|g| g.active()))
++      .unwrap_or(false)
++  }
++
++  pub(crate) fn permits_publishing(&self, namespace: &Tuple) -> bool {
++    self
++      .publishing_grant
++      .read()
++      .map(|g| g.as_ref().is_some_and(|g| g.permits(namespace)))
++      .unwrap_or(false)
++  }
++
+   pub(crate) fn new(
+     connection_id: usize,
+     connection: Arc<TransportConnection>,
+@@ -198,6 +216,7 @@ impl MOQTClient {
+     ));
+ 
+     MOQTClient {
++      publishing_grant: Arc::new(std::sync::RwLock::new(None)),
+       connection_id,
+       transport_kind: connection.kind(),
+       connection,
+diff --git a/libs/moqtail-rs/src/transport/control_stream_handler.rs b/libs/moqtail-rs/src/transport/control_stream_handler.rs
+index ba29d66..3bbf89a 100644
+--- a/libs/moqtail-rs/src/transport/control_stream_handler.rs
++++ b/libs/moqtail-rs/src/transport/control_stream_handler.rs
+@@ -25,18 +25,6 @@ const CONTROL_MESSAGE_TIMEOUT: Duration = Duration::from_secs(5);
+ 
+ const MTU_SIZE: usize = 1500; // Standard MTU size, max 2^16-1
+ 
+-/// Formats bytes as space-separated lowercase hex, for tracing raw control
+-/// messages on the wire (paste straight into tools/moq_decode.py).
+-fn to_hex(bytes: &[u8]) -> String {
+-  use std::fmt::Write;
+-  let mut s = String::with_capacity(bytes.len() * 3);
+-  for b in bytes {
+-    let _ = write!(s, "{b:02x} ");
+-  }
+-  s.pop();
+-  s
+-}
+-
+ pub struct ControlStreamHandler {
+   send: TransportSendStream,
+   recv: TransportRecvStream,
+@@ -81,14 +69,13 @@ impl ControlStreamHandler {
+       .serialize()
+       .map_err(|_| TerminationCode::InternalError)?;
+     info!(
+-      "control message sending to {} — {:?} ({} bytes): {}",
++      "control message sending to {} — {:?} ({} bytes)",
+       self.peer(),
+       message.get_type(),
+-      bytes.len(),
+-      to_hex(&bytes)
++      bytes.len()
+     );
+     if (self.send.write_all(&bytes).await).is_err() {
+-      warn!("Error sending message: {:?}", message);
++      warn!("Error sending message: {:?}", message.get_type());
+       return Err(TerminationCode::InternalError);
+     }
+     Ok(())
+@@ -134,14 +121,13 @@ impl ControlStreamHandler {
+       .serialize()
+       .map_err(|_| TerminationCode::InternalError)?;
+     info!(
+-      "control message sending to {} — {:?} ({} bytes): {}",
++      "control message sending to {} — {:?} ({} bytes)",
+       self.peer(),
+       message.get_type(),
+-      bytes.len(),
+-      to_hex(&bytes)
++      bytes.len()
+     );
+     if (self.send.write_all(&bytes).await).is_err() {
+-      warn!("Error sending (send_impl) message: {:?}", message);
++      warn!("Error sending (send_impl) message: {:?}", message.get_type());
+       return Err(TerminationCode::InternalError);
+     }
+     Ok(())
+@@ -172,11 +158,10 @@ impl ControlStreamHandler {
+           Ok(msg) => {
+             let consumed = original_remaining - bytes.remaining();
+             info!(
+-              "control message received from {} — {:?} ({} bytes): {}",
++              "control message received from {} — {:?} ({} bytes)",
+               self.peer(),
+               msg.get_type(),
+-              consumed,
+-              to_hex(&self.recv_bytes[..consumed])
++              consumed
+             );
+             self.recv_bytes.advance(consumed);
+ 
+@@ -186,10 +171,9 @@ impl ControlStreamHandler {
+           }
+           Err(ParseError::ProtocolViolation { .. }) => {
+             warn!(
+-              "control message received from {} failed to parse ({} bytes): {}",
++              "control message received from {} failed to parse ({} bytes)",
+               self.peer(),
+-              self.recv_bytes.len(),
+-              to_hex(&self.recv_bytes)
++              self.recv_bytes.len()
+             );
+             return Err(TerminationCode::ProtocolViolation);
+           }

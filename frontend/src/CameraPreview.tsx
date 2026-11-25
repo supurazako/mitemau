@@ -1,4 +1,4 @@
-import { createPublishingSession } from "./lib/publishingSession";
+import type { createPublishingSession } from "./lib/publishingSession";
 import ScreenShare from "./ScreenShare";
 import { FullTrackName } from "moqtail";
 import { useRef, useState, useEffect } from "react";
@@ -13,9 +13,10 @@ import { createVideoObjectBuilder } from "./lib/videoObjects";
 
 const previewTrack = FullTrackName.tryNew("mitemau/preview", "camera");
 
-export default function CameraPreview({ relay, streamID }: {
+export default function CameraPreview({ relay, publishing, onPublishingStopped }: {
   relay: RelaySession | null;
-  streamID: string;
+  publishing: { namespace: string; registration: ReturnType<typeof createPublishingSession> } | null;
+  onPublishingStopped: () => void;
 }) {
   const registrationRef = useRef<ReturnType<typeof createPublishingSession> | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -80,14 +81,10 @@ export default function CameraPreview({ relay, streamID }: {
       }
       let namespace: string | null = null;
       if (relay) {
-        const registration = createPublishingSession(streamID);
+        const registration = publishing?.registration;
+        if (!registration || !publishing) throw new Error("Publishing authorization missing");
         registrationRef.current = registration;
-        const result = await registration.prepare();
-        if (!mountedRef.current) {
-          await registration.stop();
-          return;
-        }
-        namespace = result.namespace;
+        namespace = publishing.namespace;
       }
       const track = namespace
         ? FullTrackName.tryNew(namespace, "camera")
@@ -196,6 +193,7 @@ export default function CameraPreview({ relay, streamID }: {
       registrationRef.current = null;
       try { await registration?.stop(); }
       catch (error) { console.error("Could not clear publication", error); }
+      if (registration) onPublishingStopped();
       if (mountedRef.current) {
         setActivePublication(null);
         setStatus("Stopped");

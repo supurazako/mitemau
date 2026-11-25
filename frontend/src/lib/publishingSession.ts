@@ -10,11 +10,15 @@ export function createPublishingSession(streamID: string) {
       keepalive: stop,
     });
     if (!response.ok) throw new Error((await response.json()).error || "Could not update publishing.");
-    return response.json() as Promise<{ namespace: string }>;
+    return response.json() as Promise<{ namespace: string; token?: string }>;
   }
 
   return {
-    prepare: () => update(false, true),
+    async prepare() {
+      const prepared = await update(false, true);
+      if (!prepared.token) throw new Error("Publishing authorization missing.");
+      return { namespace: prepared.namespace, token: prepared.token };
+    },
     start: () => update(false),
     stop: async () => { await update(true); },
   };
