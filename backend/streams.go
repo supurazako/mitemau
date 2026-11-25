@@ -20,6 +20,7 @@ type liveStream struct {
 
 func (s *broadcasterServer) streamRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /account/streams", s.ownedStreams)
+	s.publicStreamRoutes(mux)
 	s.invitationRoutes(mux)
 	mux.HandleFunc("POST /streams", s.p.verification.protect(s.createStream))
 	mux.HandleFunc("POST /streams/{id}/start", s.p.verification.protect(s.startStream))

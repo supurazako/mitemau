@@ -6,6 +6,11 @@ import (
 	"net/http"
 )
 
+type streamParticipant struct {
+	AccountID string  `json:"accountId"`
+	Namespace *string `json:"namespace"`
+}
+
 func (s *broadcasterServer) publisherRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /streams/{id}/participants", s.participants)
 	mux.HandleFunc("POST /streams/{id}/publishing", s.p.verification.protect(s.publishing))
@@ -41,11 +46,7 @@ func (s *broadcasterServer) participants(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	defer rows.Close()
-	type participant struct {
-		AccountID string  `json:"accountId"`
-		Namespace *string `json:"namespace"`
-	}
-	result := []participant{}
+	result := []streamParticipant{}
 	for rows.Next() {
 		var raw []byte
 		var namespace sql.NullString
@@ -53,7 +54,7 @@ func (s *broadcasterServer) participants(w http.ResponseWriter, r *http.Request)
 			problem(w, 503, "Could not load participants")
 			return
 		}
-		item := participant{AccountID: hex.EncodeToString(raw)}
+		item := streamParticipant{AccountID: hex.EncodeToString(raw)}
 		if namespace.Valid {
 			item.Namespace = &namespace.String
 		}
