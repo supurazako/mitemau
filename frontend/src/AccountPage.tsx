@@ -326,8 +326,8 @@ function AccountPage() {
 
   return (
     <main className="registration">
-      {signedIn && <BroadcasterApplication key={account.email} />}
-      {signedIn && <StreamManager key={account.email} />}
+      {signedIn && <BroadcasterApplication key={`broadcaster-${account.email}`} />}
+      {signedIn && <StreamManager key={`streams-${account.email}`} />}
       <CameraViewer />
       <h1>Mitemau</h1>
       {loading ? (
