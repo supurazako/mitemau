@@ -1,0 +1,92 @@
+diff --git a/node_modules/moqtail/dist/client-DQ5aGbLR.cjs b/node_modules/moqtail/dist/client-DQ5aGbLR.cjs
+index f32fa88..d33c484 100644
+--- a/node_modules/moqtail/dist/client-DQ5aGbLR.cjs
++++ b/node_modules/moqtail/dist/client-DQ5aGbLR.cjs
+@@ -1938,6 +1938,7 @@ var SubscribePublication = class {
+ 	* Function to cancel publishing, if set.
+ 	*/
+ 	#cancelPublishing;
++	#cancelDone;
+ 	/**
+ 	* Whether publishing has started.
+ 	*/
+@@ -2002,6 +2003,8 @@ var SubscribePublication = class {
+ 	* Removes the publication from the client's publication map.
+ 	*/
+ 	cancel() {
++		this.#cancelDone?.();
++		this.#cancelDone = void 0;
+ 		if (this.#cancelPublishing) {
+ 			this.#cancelPublishing();
+ 			this.client.publications.delete(this.subscribeMsg.requestId);
+@@ -2014,7 +2017,10 @@ var SubscribePublication = class {
+ 	* @throws :{@link InternalError} If sending the message fails.
+ 	*/
+ 	async done(statusCode) {
++		if (this.#isCompleted) return;
+ 		this.#isCompleted = true;
++		this.#cancelDone?.();
++		this.#cancelDone = void 0;
+ 		const publishDone = new require_model.PublishDone(statusCode, BigInt(this.#streamsOpened), new require_model.ReasonPhrase("Subscription ended"));
+ 		await this.requestStream.send(publishDone);
+ 	}
+@@ -2065,8 +2071,11 @@ var SubscribePublication = class {
+ 	*/
+ 	async publish() {
+ 		if (!this.track.trackSource.live) throw new require_model.InternalError("SubscribePublication.publish", "Track does not support live content");
+-		this.track.trackSource.live.onDone(() => {
+-			this.done(2);
++		this.#cancelDone = this.track.trackSource.live.onDone(() => {
++			void this.done(2).catch((error) => {
++				require_emitter.logger.warn("publication/subscribe", "Could not finish a terminated subscription", error);
++				this.cancel();
++			});
+ 		});
+ 		this.#highestGroupSeen = this.track.trackSource.live.largestLocation?.group;
+ 		this.#cancelPublishing = this.track.trackSource.live.onNewObject(async (obj) => {
+diff --git a/node_modules/moqtail/dist/client-DVi4Nh1J.mjs b/node_modules/moqtail/dist/client-DVi4Nh1J.mjs
+index d178550..50d568b 100644
+--- a/node_modules/moqtail/dist/client-DVi4Nh1J.mjs
++++ b/node_modules/moqtail/dist/client-DVi4Nh1J.mjs
+@@ -1938,6 +1938,7 @@ var SubscribePublication = class {
+ 	* Function to cancel publishing, if set.
+ 	*/
+ 	#cancelPublishing;
++	#cancelDone;
+ 	/**
+ 	* Whether publishing has started.
+ 	*/
+@@ -2002,6 +2003,8 @@ var SubscribePublication = class {
+ 	* Removes the publication from the client's publication map.
+ 	*/
+ 	cancel() {
++		this.#cancelDone?.();
++		this.#cancelDone = void 0;
+ 		if (this.#cancelPublishing) {
+ 			this.#cancelPublishing();
+ 			this.client.publications.delete(this.subscribeMsg.requestId);
+@@ -2014,7 +2017,10 @@ var SubscribePublication = class {
+ 	* @throws :{@link InternalError} If sending the message fails.
+ 	*/
+ 	async done(statusCode) {
++		if (this.#isCompleted) return;
+ 		this.#isCompleted = true;
++		this.#cancelDone?.();
++		this.#cancelDone = void 0;
+ 		const publishDone = new PublishDone(statusCode, BigInt(this.#streamsOpened), new ReasonPhrase("Subscription ended"));
+ 		await this.requestStream.send(publishDone);
+ 	}
+@@ -2065,8 +2071,11 @@ var SubscribePublication = class {
+ 	*/
+ 	async publish() {
+ 		if (!this.track.trackSource.live) throw new InternalError("SubscribePublication.publish", "Track does not support live content");
+-		this.track.trackSource.live.onDone(() => {
+-			this.done(2);
++		this.#cancelDone = this.track.trackSource.live.onDone(() => {
++			void this.done(2).catch((error) => {
++				logger.warn("publication/subscribe", "Could not finish a terminated subscription", error);
++				this.cancel();
++			});
+ 		});
+ 		this.#highestGroupSeen = this.track.trackSource.live.largestLocation?.group;
+ 		this.#cancelPublishing = this.track.trackSource.live.onNewObject(async (obj) => {

@@ -51,7 +51,9 @@ export function connectRelay(
       }
       return {
         stream: result.stream,
-        unsubscribe: () => client.unsubscribe(result.requestId),
+        unsubscribe: async () => {
+          if (!closed) await client.unsubscribe(result.requestId);
+        },
       };
     },
     publishMedia(names) {
