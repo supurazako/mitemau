@@ -391,3 +391,46 @@ func TestApprovalActivityMySQL(t *testing.T) {
 	}
 
 }
+
+func TestEvidenceAddedAfterReportMySQL(t *testing.T) {
+	f := moderationDB(t)
+	ctx := context.Background()
+	accepted := f.now
+	later := accepted.Add(24 * time.Hour)
+	stream, comment, report := randomModerationID(16), randomModerationID(16), randomModerationID(16)
+	f.transaction(t, func(tx *sql.Tx) error {
+		if err := recordCommentPosted(ctx, tx, f.user, stream, comment, "continued behavior after report", later); err != nil {
+			return err
+		}
+		var event int64
+		if err := tx.QueryRow("SELECT id FROM moderation_events WHERE comment_id=?", comment).Scan(&event); err != nil {
+			return err
+		}
+		if err := retainReportEvidence(ctx, tx, report, event, accepted, later); err != nil {
+			return err
+		}
+		return retainCommentEvidence(ctx, tx, report, comment, accepted, later)
+	})
+	var count int
+	if err := f.db.QueryRow("SELECT COUNT(*) FROM moderation_evidence WHERE report_id=? AND occurred_at=? AND expires_at=? AND body=?", report, later, accepted.Add(evidenceRetention), "continued behavior after report").Scan(&count); err != nil || count != 2 {
+		t.Fatal("later evidence missing or deadline extended", count, err)
+	}
+	// Keep rejecting future-dated source material, without changing the deadline.
+	future := randomModerationID(16)
+	f.transaction(t, func(tx *sql.Tx) error {
+		if err := recordCommentPosted(ctx, tx, f.user, stream, future, "future source", later.Add(time.Hour)); err != nil {
+			return err
+		}
+		var event int64
+		if err := tx.QueryRow("SELECT id FROM moderation_events WHERE comment_id=?", future).Scan(&event); err != nil {
+			return err
+		}
+		if err := retainReportEvidence(ctx, tx, report, event, accepted, later); err != nil {
+			return err
+		}
+		return retainCommentEvidence(ctx, tx, report, future, accepted, later)
+	})
+	if err := f.db.QueryRow("SELECT COUNT(*) FROM moderation_evidence WHERE report_id=?", report).Scan(&count); err != nil || count != 2 {
+		t.Fatal("future source accepted", count, err)
+	}
+}

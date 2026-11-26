@@ -6,7 +6,7 @@ Only current staff accounts may use investigation APIs and the investigation vie
 
 - A comment becomes publicly unavailable immediately on deletion or whole-stream end. Its investigation-only body expires 30 days after the first such event. Repeated deletion or stream end does not extend this clock.
 - Ordinary activity events expire 90 days after occurrence.
-- Evidence snapshots expire 180 days after the report's original acceptance. Closing, retrying or leaving the report unresolved does not extend that deadline.
+- Evidence snapshots expire 180 days after the report's original acceptance. Closing, retrying or leaving the report unresolved does not extend that deadline. Staff may add still-retained evidence of behavior occurring after report acceptance, but that evidence uses the same original deadline.
 - Report and staff-action history expires 180 days after each event's occurrence.
 - Expiry is enforced during reads, even before periodic physical deletion. Cleanup deletes bounded batches every minute. This worker covers application storage and does not manage external backups.
 

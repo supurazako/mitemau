@@ -63,7 +63,7 @@ func retainReportEvidence(ctx context.Context, tx *sql.Tx, report []byte, eventI
  SELECT ?,e.id,?,e.kind,e.actor_id,e.account_id,e.stream_id,e.comment_id,e.occurred_at,c.body,?,?
  FROM moderation_events e LEFT JOIN moderation_comment_content c ON c.comment_id=e.comment_id AND (c.expires_at IS NULL OR c.expires_at>?)
  WHERE e.id=? AND e.expires_at>? AND e.occurred_at<=?
- ON DUPLICATE KEY UPDATE event_id=event_id`, report, "event:"+strconv.FormatInt(eventID, 10), acceptedAt, acceptedAt.Add(evidenceRetention), now, eventID, now, acceptedAt)
+ ON DUPLICATE KEY UPDATE event_id=event_id`, report, "event:"+strconv.FormatInt(eventID, 10), acceptedAt, acceptedAt.Add(evidenceRetention), now, eventID, now, now)
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func retainCommentEvidence(ctx context.Context, tx *sql.Tx, report, comment []by
 	_, err := tx.ExecContext(ctx, `INSERT INTO moderation_evidence(report_id,event_id,source_key,kind,actor_id,account_id,stream_id,comment_id,occurred_at,body,accepted_at,expires_at)
  SELECT ?,NULL,?,'comment_posted',account_id,account_id,stream_id,comment_id,posted_at,body,?,?
  FROM moderation_comment_content WHERE comment_id=? AND (expires_at IS NULL OR expires_at>?) AND posted_at<=?
- ON DUPLICATE KEY UPDATE source_key=source_key`, report, "comment:"+hex.EncodeToString(comment), acceptedAt, acceptedAt.Add(evidenceRetention), comment, now, acceptedAt)
+ ON DUPLICATE KEY UPDATE source_key=source_key`, report, "comment:"+hex.EncodeToString(comment), acceptedAt, acceptedAt.Add(evidenceRetention), comment, now, now)
 	return err
 }
 
