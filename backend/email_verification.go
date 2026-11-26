@@ -89,7 +89,10 @@ func (s *verificationServer) protect(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
-	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048))
+	return decodeBodyLimit(w, r, v, 2048)
+}
+func decodeBodyLimit(w http.ResponseWriter, r *http.Request, v any, limit int64) bool {
+	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
 	d.DisallowUnknownFields()
 	if err := d.Decode(v); err != nil {
 		problem(w, 400, "Invalid request")

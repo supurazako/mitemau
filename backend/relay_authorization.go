@@ -19,9 +19,7 @@ func (s *broadcasterServer) publisherCredential(namespace string) string {
 
 func (s *broadcasterServer) authorizeRelay(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	expected := "Bearer " + hex.EncodeToString(s.relayAuthKey)
-	if len(s.relayAuthKey) != 32 || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte(expected)) != 1 {
-		problem(w, 401, "Relay authentication required")
+	if !s.authenticateRelay(w, r) {
 		return
 	}
 	var input struct {
@@ -33,6 +31,9 @@ func (s *broadcasterServer) authorizeRelay(w http.ResponseWriter, r *http.Reques
 	raw, err := hex.DecodeString(input.Token)
 	if err != nil || len(raw) != 32 {
 		problem(w, 403, "Publishing permission denied")
+		return
+	}
+	if s.authorizeCommentPublisher(w, r, input.Token) {
 		return
 	}
 	var stream, account, session []byte
