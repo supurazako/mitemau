@@ -1,4 +1,4 @@
-import ReportUser from "./ReportUser";
+import { useReportComposer } from "./lib/useReportComposer";
 import { useEffect, useRef, useState } from "react";
 import { FullTrackName } from "moqtail";
 import { AppLink } from "./AppLink";
@@ -13,7 +13,7 @@ async function pause(signal: AbortSignal) {
 }
 
 export default function LiveComments({ streamID }: { streamID: string }) {
-  const [reportTarget, setReportTarget] = useState<{ accountId: string; commentId: string }>();
+  const openReport = useReportComposer();
   const [snapshot, setSnapshot] = useState<CommentSnapshot>();
   const [status, setStatus] = useState("Connecting comments");
   const [ended, setEnded] = useState(false);
@@ -180,11 +180,10 @@ export default function LiveComments({ streamID }: { streamID: string }) {
       <ol>{snapshot?.comments.map((comment) => <li key={comment.id} data-comment-id={comment.id}>
         <AppLink href={`/${comment.accountId}`}>{comment.accountId.slice(0, 10)}</AppLink>{" "}<time dateTime={comment.postedAt}>{new Date(comment.postedAt).toLocaleTimeString()}</time>
         <p>{comment.body}</p>
-        <button type="button" onClick={() => setReportTarget({ accountId: comment.accountId, commentId: comment.id })}>Report user</button>
+        <button type="button" onClick={() => openReport({ accountId: comment.accountId, commentId: comment.id, streamId: streamID })}>Report user</button>
         {canDelete && !ended && <button type="button" disabled={deleting !== null} onClick={() => void removeComment(comment.id)} aria-label={`Delete comment by ${comment.accountId.slice(0, 10)} at ${new Date(comment.postedAt).toLocaleTimeString()}`}>{deleting === comment.id ? "Deleting…" : "Delete"}</button>}
       </li>)}</ol>
     </div>
-    {reportTarget && <ReportUser key={reportTarget.commentId} targetId={reportTarget.accountId} streamId={streamID} relatedCommentId={reportTarget.commentId} initiallyOpen />}
     {!ended && <form onSubmit={(event) => { event.preventDefault(); void post(); }}>
       <label>Comment <textarea value={body} disabled={posting} onChange={(event) => { setBody(event.target.value); pending.current = null; }} required /></label>
       <p>{characters} / 500 · Latest 50 comments · One post per two seconds across all streams</p>

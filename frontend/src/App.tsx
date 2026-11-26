@@ -1,3 +1,4 @@
+import ReportComposer from "./ReportComposer";
 import "./App.css";
 import AccountPage from "./AccountPage";
 import { useSyncExternalStore } from "react";
@@ -27,6 +28,6 @@ export default function App() {
         <AppLink href="/account" aria-current={path === "/account" ? "page" : undefined}>Account &amp; broadcasting</AppLink>
       </nav>
     </header>
-    {page}
+    <ReportComposer key={path}>{page}</ReportComposer>
   </>;
 }
