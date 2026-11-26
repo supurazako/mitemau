@@ -434,7 +434,7 @@ index b9102d8..bc58434 100644
  tracing.workspace = true
  tracing-subscriber.workspace = true
 diff --git a/apps/relay/build.rs b/apps/relay/build.rs
-index 7a397a6..8685806 100644
+index 7a397a6..76bca6d 100644
 --- a/apps/relay/build.rs
 +++ b/apps/relay/build.rs
 @@ -12,16 +12,8 @@
@@ -451,7 +451,7 @@ index 7a397a6..8685806 100644
 -    .and_then(|output| String::from_utf8(output.stdout).ok())
 -    .map(|s| s.trim().to_string())
 -    .unwrap_or_else(|| "unknown".to_string());
-+  let commit = "bafde0a-mitemau-auth-v1";
++  let commit = "bafde0a-mitemau-comments-v1";
  
    let version = env!("CARGO_PKG_VERSION");
    let moqtail_version = format!("moqtail/{version}+{commit}");
@@ -475,8 +475,33 @@ index 39711ca..3c5e6b7 100644
      let endpoints = self.app_config.build_quic_endpoints().await?;
  
      info!(
+diff --git a/apps/relay/src/server/message_handlers/fetch_handler.rs b/apps/relay/src/server/message_handlers/fetch_handler.rs
+index 59be27d..3518b7d 100644
+--- a/apps/relay/src/server/message_handlers/fetch_handler.rs
++++ b/apps/relay/src/server/message_handlers/fetch_handler.rs
+@@ -346,6 +346,20 @@ pub async fn handle(
+       };
+ 
+       let full_track_name = fetch.get_full_track_name();
++      if !crate::server::publishing_auth::permit_comment_read(&full_track_name).await {
++        return Err(TerminationCode::Unauthorized);
++      }
++      if crate::server::publishing_auth::is_comment_namespace(&full_track_name.namespace) {
++        send_request_error(
++          client.clone(),
++          request_id,
++          RequestErrorCode::DoesNotExist,
++          ReasonPhrase::try_new("Comment scrollback is available only through the live API".into())
++            .unwrap(),
++        )
++        .await;
++        return Ok(());
++      }
+       let location_filter = fetch.get_location_filter().clone();
+       let requested_end = location_filter.end_location();
+ 
 diff --git a/apps/relay/src/server/message_handlers/publish_handler.rs b/apps/relay/src/server/message_handlers/publish_handler.rs
-index 528f928..c22370f 100644
+index 528f928..856c194 100644
 --- a/apps/relay/src/server/message_handlers/publish_handler.rs
 +++ b/apps/relay/src/server/message_handlers/publish_handler.rs
 @@ -69,8 +69,7 @@ pub async fn handle(
@@ -489,7 +514,17 @@ index 528f928..c22370f 100644
        let is_authorized = validate_publish_authorization(&m.track_namespace, &client).await;
  
        if !is_authorized {
-@@ -967,18 +966,10 @@ async fn register_ssts_assignment_from_publish_ok(
+@@ -533,6 +532,9 @@ pub(crate) async fn push_track_to_subscriber(
+   publish: &Publish,
+   subscribe_tracks_params: &[MessageParameter],
+ ) -> bool {
++  if !crate::server::publishing_auth::permit_comment_read(&track_arc.full_track_name).await {
++    return false;
++  }
+   let Some(range_filters) = crate::server::subscription::filter_constructor::filters_for_track(
+     subscribe_tracks_params,
+     &publish.track_properties,
+@@ -967,18 +969,10 @@ async fn register_ssts_assignment_from_publish_ok(
  
  /// Validates if the client is authorized to publish to the given track namespace
  async fn validate_publish_authorization(
@@ -532,6 +567,35 @@ index 2c7c6c2..8b58b6d 100644
        // TODO: the namespace is already announced, return error
        info!("received PublishNamespace message");
  
+diff --git a/apps/relay/src/server/message_handlers/subscribe_handler.rs b/apps/relay/src/server/message_handlers/subscribe_handler.rs
+index 355ea0a..64bd0b9 100644
+--- a/apps/relay/src/server/message_handlers/subscribe_handler.rs
++++ b/apps/relay/src/server/message_handlers/subscribe_handler.rs
+@@ -171,6 +171,9 @@ async fn handle_subscribe_message(
+   info!("received Subscribe message: {:?}", sub);
+   let track_namespace = sub.track_namespace.clone();
+   let full_track_name = sub.get_full_track_name();
++  if !crate::server::publishing_auth::permit_comment_read(&full_track_name).await {
++    return Err(TerminationCode::Unauthorized);
++  }
+ 
+   // The relay applies Range Filters itself, so ones it cannot honour are refused
+   // before anything is created rather than dropped.
+diff --git a/apps/relay/src/server/message_handlers/subscribe_handler/request_update.rs b/apps/relay/src/server/message_handlers/subscribe_handler/request_update.rs
+index 7d7e4cf..a324886 100644
+--- a/apps/relay/src/server/message_handlers/subscribe_handler/request_update.rs
++++ b/apps/relay/src/server/message_handlers/subscribe_handler/request_update.rs
+@@ -74,6 +74,10 @@ pub async fn handle_request_update(
+     }
+   };
+ 
++  if !crate::server::publishing_auth::permit_comment_read(&full_track_name).await {
++    return Err(TerminationCode::Unauthorized);
++  }
++
+   // Filters the subscription would be left with but that cannot be honoured fail
+   // the update before any of it is applied.
+   if let Err(e) = filter_constructor::updated_filter(
 diff --git a/apps/relay/src/server/message_handlers/subscribe_handler/upstream.rs b/apps/relay/src/server/message_handlers/subscribe_handler/upstream.rs
 index 28568c2..8ad872c 100644
 --- a/apps/relay/src/server/message_handlers/subscribe_handler/upstream.rs
@@ -729,6 +793,44 @@ index 2443215..fdbb544 100644
        connection_id,
        transport_kind: connection.kind(),
        connection,
+diff --git a/apps/relay/src/server/track/ingest.rs b/apps/relay/src/server/track/ingest.rs
+index badf992..e137580 100644
+--- a/apps/relay/src/server/track/ingest.rs
++++ b/apps/relay/src/server/track/ingest.rs
+@@ -35,7 +35,9 @@ impl Track {
+   /// evicted from the cache has to be fetchable into it again.
+   pub async fn cache_fetched_object(&self, object: &Object) {
+     if let Ok(fetch_object) = object.clone().try_into_fetch() {
+-      self.cache.add_object(fetch_object).await;
++      if !crate::server::publishing_auth::is_comment_namespace(&self.full_track_name.namespace) {
++        self.cache.add_object(fetch_object).await;
++      }
+     }
+     self.record_arrival(object).await;
+   }
+@@ -146,7 +148,9 @@ impl Track {
+     // The cache cannot hold a status, so all that is kept of one is what it says does
+     // not exist.
+     if let Ok(fetch_object) = object.clone().try_into_fetch() {
+-      self.cache.add_object(fetch_object).await;
++      if !crate::server::publishing_auth::is_comment_namespace(&self.full_track_name.namespace) {
++        self.cache.add_object(fetch_object).await;
++      }
+     }
+     self.note_absent(object, false);
+     // Before the fan-out: a subscriber joining now starts after the Largest Location,
+@@ -202,7 +206,10 @@ impl Track {
+         // The cache cannot hold a status, so all that is kept of one is what it says
+         // does not exist.
+         if let Ok(fetch_object) = object.clone().try_into_fetch() {
+-          self.cache.add_object(fetch_object).await;
++          if !crate::server::publishing_auth::is_comment_namespace(&self.full_track_name.namespace)
++          {
++            self.cache.add_object(fetch_object).await;
++          }
+         }
+         self.note_absent(&object, end_of_group);
+         self.record_arrival(&object).await;
 diff --git a/libs/moqtail-rs/src/transport/control_stream_handler.rs b/libs/moqtail-rs/src/transport/control_stream_handler.rs
 index ba29d66..3bbf89a 100644
 --- a/libs/moqtail-rs/src/transport/control_stream_handler.rs

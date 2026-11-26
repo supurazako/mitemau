@@ -2,3 +2,5 @@
 !Dockerfile
 !upstream.patch
 !publishing_auth.rs
+
+!comment-publisher.rs

@@ -4,7 +4,7 @@ The Relay runs on its own Debian VM using Docker Engine and Docker Compose. This
 
 ## Runtime configuration
 
-- The custom image builds draft-22 MOQtail Relay 0.18.0 at `bafde0a3f2af403d3ae3509bf86c8e719d9fe402` with `upstream.patch` and `publishing_auth.rs`. The source archive checksum and patched Cargo lockfile are checked during the build.
+- The custom image builds draft-22 MOQtail Relay 0.18.0 at `bafde0a3f2af403d3ae3509bf86c8e719d9fe402` with `upstream.patch`, `publishing_auth.rs`, and the independent `comment-publisher.rs` binary. The source archive checksum and patched Cargo lockfile are checked during the build.
 - Use a draft-22 client (initially `moqtail@0.16.0`); the previous draft-18 client path is incompatible.
 - WebTransport and QUIC use UDP port 4433.
 - The container runs as UID/GID 65532 with a read-only root filesystem, no Linux capabilities, and `no-new-privileges`.
@@ -73,3 +73,10 @@ The initial reconnect flow is manual. The sender chooses Connect and then Start 
 The fifteen-second interval starts at the last authorization check, not at the physical instant a network fails. A silent network loss first needs the Relay's QUIC connection-loss detection (the pinned Relay defaults to a seven-second idle timeout). Viewer updates also depend on the two-second API polling interval and network availability. An alive connection with stalled media encoding is not detected by this mechanism. API outages expire sending leases rather than keeping stale publishers visible indefinitely.
 
 Migration `000013` clears previously advertised namespaces and revokes pre-migration grants because they have no measured liveness. Existing senders must reconnect after this migration. Apply it before starting the updated API.
+
+
+## Live comment publisher
+
+The `comment-publisher` compose service sends Go-accepted comment snapshots through the same pinned draft-22 Relay. It is separate from browser media publishers and uses a server-owned namespace and service-authenticated API endpoints. See [live comment architecture and validation](../../docs/comments.md) for the latest-50 bootstrap, reconnect, per-account posting limits and end-of-stream authorization behavior. Build the updated image and apply migration `000015` before starting these services.
+
+When using a host-loopback API tunnel, configure both services with `network_mode: host` and remove the relay's `ports` mapping. On the same machine as the Relay, `COMMENT_RELAY_ADDRESS=127.0.0.1:4433` keeps native QUIC local while the URI hostname is still used for TLS verification. The experimental akamai instance uses this arrangement.
