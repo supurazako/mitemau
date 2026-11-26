@@ -1,3 +1,4 @@
+import LiveComments from "./LiveComments";
 import { useEffect, useState } from "react";
 import CameraViewer from "./CameraViewer";
 import { AppLink } from "./AppLink";
@@ -106,6 +107,7 @@ function StreamPlayback({ streamID }: { streamID: string }) {
           ? <CameraViewer key={participant.namespace} initialNamespace={participant.namespace} />
           : <p role="status">{participant.publishingState === "disconnected" ? "Connection lost. Waiting for the participant to reconnect." : "Not publishing"}</p>}
       </section>)}
+      <LiveComments key={streamID} streamID={streamID} />
     </>}
   </div>;
 }

@@ -2,7 +2,7 @@ name: moqtail-relay
 
 services:
   relay:
-    image: mitemau-relay:bafde0a-auth-v1
+    image: mitemau-relay:bafde0a-comments-v1
     build: .
     container_name: moqtail-relay
     pull_policy: never
@@ -32,3 +32,19 @@ services:
       - --log-folder
       - /logs
     stop_grace_period: 15s
+
+  comment-publisher:
+    image: mitemau-relay:bafde0a-comments-v1
+    pull_policy: never
+    entrypoint: ["/usr/local/bin/comment-publisher"]
+    environment:
+      RELAY_AUTH_URL: ${RELAY_AUTH_URL:?Set RELAY_AUTH_URL}
+      RELAY_AUTH_KEY: ${RELAY_AUTH_KEY:?Set RELAY_AUTH_KEY}
+      COMMENT_RELAY_URL: ${COMMENT_RELAY_URL:-moqt://relay-test.supurazako.com:4433}
+    user: "65532:65532"
+    userns_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on: [relay]
+    restart: unless-stopped

@@ -90,7 +90,12 @@ func (s *broadcasterServer) cleanupModeration(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
+	_, err := s.p.verification.db.ExecContext(ctx, "DELETE FROM comment_posting_cooldowns WHERE next_post_at<=? LIMIT 1000", now)
+	if err != nil {
+		return err
+	}
+	_, err = s.p.verification.db.ExecContext(ctx, "DELETE FROM stream_comments WHERE stream_id IN (SELECT id FROM live_streams WHERE state='ended' AND ended_at<=?) LIMIT 1000", now.Add(-commentRetention))
+	return err
 }
 
 func (s *broadcasterServer) runModerationCleanup(ctx context.Context) {

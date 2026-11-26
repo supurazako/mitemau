@@ -1,3 +1,4 @@
+import LiveComments from "./LiveComments";
 import { useEffect, useRef, useState } from "react";
 import SharedStreamViewer from "./SharedStreamViewer";
 import StreamInvitations from "./StreamInvitations";
@@ -106,6 +107,7 @@ export default function StreamManager() {
           )}
           {selected.state === "live" && <RelayConnection key={`publish-${selected.id}`}
             streamID={selected.id} />}
+          {selected.state === "live" && <LiveComments key={`comments-${selected.id}`} streamID={selected.id} />}
           {selected.state === "live" && <SharedStreamViewer key={`view-${selected.id}`} streamID={selected.id} ownAccountID={selected.publisherId} />}
         </section>
       )}

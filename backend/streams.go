@@ -250,6 +250,9 @@ func (s *broadcasterServer) transitionStream(w http.ResponseWriter, r *http.Requ
 			_, err = recordActivity(r.Context(), tx, kind, actor, creator, id, nil, nil, now)
 		}
 		if err == nil && target == "ended" {
+			_, err = tx.ExecContext(r.Context(), "DELETE FROM stream_comment_publications WHERE stream_id=?", id)
+		}
+		if err == nil && target == "ended" {
 			err = hideStreamCommentContent(r.Context(), tx, id, now)
 		}
 		if err != nil {

@@ -215,3 +215,83 @@ mod tests {
     assert!(!grant.permits(&namespace));
   }
 }
+
+// Comment history is application-controlled. Recheck every read entry point,
+// including requests that could otherwise be satisfied from the Relay cache.
+pub(super) fn is_comment_namespace(namespace: &Tuple) -> bool {
+  let fields = &namespace.fields;
+  fields.len() >= 4
+    && fields[0].as_bytes() == b"mitemau"
+    && fields[1].as_bytes() == b"streams"
+    && fields[3].as_bytes() == b"comments"
+}
+
+pub(super) async fn permit_comment_read(
+  name: &moqtail::model::data::full_track_name::FullTrackName,
+) -> bool {
+  let fields = &name.namespace.fields;
+  if fields.len() < 4
+    || fields[0].as_bytes() != b"mitemau"
+    || fields[1].as_bytes() != b"streams"
+    || fields[3].as_bytes() != b"comments"
+  {
+    return true;
+  }
+  let path = name.namespace.to_utf8_path();
+  if fields.len() != 5
+    || name.name.as_bytes() != b"comments"
+    || Tuple::from_utf8_path(&path) != name.namespace
+  {
+    return false;
+  }
+  let mut url = AUTHORITY.url.clone();
+  url.set_path("/relay/comments/read");
+  let Ok(response) = AUTHORITY
+    .http
+    .post(url)
+    .bearer_auth(&AUTHORITY.key)
+    .json(&serde_json::json!({"namespace":path.trim_start_matches('/')}))
+    .send()
+    .await
+  else {
+    return false;
+  };
+  if !response.status().is_success() {
+    return false;
+  }
+  response
+    .json::<serde_json::Value>()
+    .await
+    .ok()
+    .and_then(|v| v["allowed"].as_bool())
+    .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod comment_tests {
+  use super::*;
+  use moqtail::model::{common::tuple::TupleField, data::full_track_name::FullTrackName};
+  #[tokio::test]
+  async fn ordinary_media_and_malformed_comment_names_do_not_call_authority() {
+    let media = FullTrackName::new(
+      Tuple::from_utf8_path("mitemau/streams/s/publishers/u/session"),
+      TupleField::from_utf8("camera"),
+    )
+    .unwrap();
+    assert!(!is_comment_namespace(&media.namespace));
+    assert!(permit_comment_read(&media).await);
+    let wrong_track = FullTrackName::new(
+      Tuple::from_utf8_path("mitemau/streams/s/comments/session"),
+      TupleField::from_utf8("camera"),
+    )
+    .unwrap();
+    assert!(is_comment_namespace(&wrong_track.namespace));
+    assert!(!permit_comment_read(&wrong_track).await);
+    let extra = FullTrackName::new(
+      Tuple::from_utf8_path("mitemau/streams/s/comments/session/extra"),
+      TupleField::from_utf8("comments"),
+    )
+    .unwrap();
+    assert!(!permit_comment_read(&extra).await);
+  }
+}
