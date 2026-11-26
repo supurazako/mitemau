@@ -58,6 +58,7 @@ func moderationDB(t *testing.T) *moderationFixture {
 	t.Cleanup(func() {
 		for _, id := range [][]byte{f.user, f.guest, f.staff} {
 			db.Exec("DELETE FROM moderation_evidence WHERE account_id=?", id)
+			db.Exec("DELETE FROM comment_permission_actions WHERE event_id IN (SELECT id FROM moderation_events WHERE account_id=?)", id)
 			db.Exec("DELETE FROM moderation_events WHERE account_id=?", id)
 			db.Exec("DELETE FROM moderation_comment_content WHERE account_id=?", id)
 			db.Exec("DELETE FROM live_streams WHERE creator_id=?", id)

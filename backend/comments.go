@@ -156,13 +156,18 @@ func (s *broadcasterServer) postComment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var allowed bool = true
-	err = tx.QueryRowContext(r.Context(), "SELECT posting_allowed FROM account_comment_permissions WHERE account_id=? FOR UPDATE", actor).Scan(&allowed)
+	var suspensionReason sql.NullString
+	err = tx.QueryRowContext(r.Context(), "SELECT posting_allowed,suspension_reason FROM account_comment_permissions WHERE account_id=? FOR UPDATE", actor).Scan(&allowed, &suspensionReason)
 	if err != nil && err != sql.ErrNoRows {
 		problem(w, 503, "Could not check comment permission")
 		return
 	}
 	if !allowed {
-		problem(w, 403, "Comment posting is suspended")
+		message := "Comment posting is suspended"
+		if suspensionReason.Valid {
+			message += ": " + suspensionReason.String
+		}
+		problem(w, 403, message)
 		return
 	}
 	var state string

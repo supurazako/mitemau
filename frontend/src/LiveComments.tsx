@@ -18,6 +18,7 @@ export default function LiveComments({ streamID }: { streamID: string }) {
   const [status, setStatus] = useState("Connecting comments");
   const [ended, setEnded] = useState(false);
   const [body, setBody] = useState("");
+  const [suspension, setSuspension] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
   const [postStatus, setPostStatus] = useState("");
   const [canDelete, setCanDelete] = useState(false);
@@ -136,6 +137,26 @@ export default function LiveComments({ streamID }: { streamID: string }) {
     return () => { controller.abort(); deletion.current?.abort(); window.clearInterval(timer); };
   }, [streamID]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    let loading = false;
+    async function refresh() {
+      if (loading) return;
+      loading = true;
+      try {
+        const response = await fetch("/api/account/comment-permission", { signal: controller.signal, cache: "no-store" });
+        if (response.status === 401) { if (!controller.signal.aborted) setSuspension(null); return; }
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!controller.signal.aborted) setSuspension(data.postingAllowed ? null : data.reason || "Comment posting is suspended");
+      } catch { /* The posting API remains authoritative during connection loss. */ }
+      finally { loading = false; }
+    }
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 2000);
+    return () => { controller.abort(); window.clearInterval(timer); };
+  }, []);
+
   async function removeComment(id: string) {
     if (deletion.current || ended) return;
     const controller = new AbortController(); deletion.current = controller;
@@ -159,7 +180,7 @@ export default function LiveComments({ streamID }: { streamID: string }) {
   useEffect(() => { if (pinned.current && view.current) view.current.scrollTop = view.current.scrollHeight; }, [snapshot]);
 
   async function post() {
-    if (running.current || ended || characters === 0 || characters > 500) return;
+    if (running.current || ended || suspension !== null || characters === 0 || characters > 500) return;
     running.current = true; setPosting(true); setPostStatus("");
     const request = new AbortController(); postRequest.current = request;
     const text = body.trim();
@@ -184,10 +205,11 @@ export default function LiveComments({ streamID }: { streamID: string }) {
         {canDelete && !ended && <button type="button" disabled={deleting !== null} onClick={() => void removeComment(comment.id)} aria-label={`Delete comment by ${comment.accountId.slice(0, 10)} at ${new Date(comment.postedAt).toLocaleTimeString()}`}>{deleting === comment.id ? "Deleting…" : "Delete"}</button>}
       </li>)}</ol>
     </div>
+    {suspension !== null && <p role="status">Posting suspended: {suspension}</p>}
     {!ended && <form onSubmit={(event) => { event.preventDefault(); void post(); }}>
-      <label>Comment <textarea value={body} disabled={posting} onChange={(event) => { setBody(event.target.value); pending.current = null; }} required /></label>
+      <label>Comment <textarea value={body} disabled={posting || suspension !== null} onChange={(event) => { setBody(event.target.value); pending.current = null; }} required /></label>
       <p>{characters} / 500 · Latest 50 comments · One post per two seconds across all streams</p>
-      <button disabled={posting || characters === 0 || characters > 500}>Post comment</button>
+      <button disabled={posting || suspension !== null || characters === 0 || characters > 500}>Post comment</button>
       <p>Posting requires sign-in. <AppLink href="/account">Account &amp; sign-in</AppLink></p>
     </form>}
     {deleteStatus && <p role="status">{deleteStatus}</p>}
