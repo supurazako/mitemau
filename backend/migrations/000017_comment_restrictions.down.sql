@@ -1,0 +1,2 @@
+DROP TABLE comment_permission_actions;
+ALTER TABLE account_comment_permissions DROP COLUMN suspension_reason;

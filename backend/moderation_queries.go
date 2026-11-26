@@ -70,8 +70,8 @@ func (s *broadcasterServer) investigation(w http.ResponseWriter, r *http.Request
 		}
 	}
 	now := s.p.verification.now()
-	selectSQL := `SELECT e.id,e.kind,e.actor_id,e.account_id,e.stream_id,e.comment_id,e.report_id,e.occurred_at,e.expires_at,COALESCE(o.outcome,c.body) FROM moderation_events e LEFT JOIN moderation_comment_content c ON c.comment_id=e.comment_id AND (c.expires_at IS NULL OR c.expires_at>?) LEFT JOIN report_outcomes o ON e.kind='report_resolved' AND o.report_id=e.report_id AND o.expires_at>?`
-	args := []any{now, now}
+	selectSQL := `SELECT e.id,e.kind,e.actor_id,e.account_id,e.stream_id,e.comment_id,e.report_id,e.occurred_at,e.expires_at,COALESCE(a.reason,o.outcome,c.body) FROM moderation_events e LEFT JOIN moderation_comment_content c ON c.comment_id=e.comment_id AND (c.expires_at IS NULL OR c.expires_at>?) LEFT JOIN report_outcomes o ON e.kind='report_resolved' AND o.report_id=e.report_id AND o.expires_at>? LEFT JOIN comment_permission_actions a ON a.event_id=e.id AND a.expires_at>?`
+	args := []any{now, now, now}
 	if evidence {
 		selectSQL = `SELECT e.id,e.kind,e.actor_id,e.account_id,e.stream_id,e.comment_id,e.report_id,e.occurred_at,e.expires_at,e.body FROM moderation_evidence e`
 		args = nil

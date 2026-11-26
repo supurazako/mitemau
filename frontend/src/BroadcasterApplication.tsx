@@ -1,3 +1,4 @@
+import { CommentPermissionLookup } from "./CommentPermissionControl";
 import StaffReports from "./StaffReports";
 import ModerationActivity from "./ModerationActivity";
 import { useEffect, useRef, useState } from "react";
@@ -89,7 +90,7 @@ export default function BroadcasterApplication() {
           ))}</ul>
         </section>
       )}
-      {access?.staff && <><StaffReports /><ModerationActivity /></>}
+      {access?.staff && <><StaffReports /><CommentPermissionLookup /><ModerationActivity /></>}
     </section>
   );
 }
