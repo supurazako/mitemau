@@ -4,7 +4,7 @@ import SharedStreamViewer from "./SharedStreamViewer";
 import StreamInvitations from "./StreamInvitations";
 import RelayConnection from "./RelayConnection";
 
-type Stream = { id: string; creatorId: string; publisherId: string; title: string; state: "ready" | "live" | "ended" };
+type Stream = { id: string; creatorId: string; publisherId: string; title: string; state: "ready" | "live" | "ended"; endReason?: string };
 
 async function request<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, body === undefined ? {} : {
@@ -16,6 +16,8 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export default function StreamManager() {
+  const [access, setAccess] = useState<{ status: string; reason?: string | null }>();
+  const canPublish = access?.status === "approved";
   const [streams, setStreams] = useState<Stream[]>([]);
   const [selectedID, setSelectedID] = useState("");
   const [title, setTitle] = useState("");
@@ -34,8 +36,8 @@ export default function StreamManager() {
       refreshing = true;
       const version = generation.current;
       try {
-        const result = await request<Stream[]>("/api/account/streams");
-        if (active && version === generation.current) setStreams(result);
+        const [result, permission] = await Promise.all([request<Stream[]>("/api/account/streams"), request<{ status: string; reason?: string | null }>("/api/account/broadcaster")]);
+        if (active && version === generation.current) { setStreams(result); setAccess(permission); }
       } catch (cause) {
         if (active && version === generation.current) setError(String(cause));
       } finally {
@@ -84,28 +86,31 @@ export default function StreamManager() {
   return (
     <section>
       <h2>Your streams</h2>
+      {access?.status === "suspended" && <p role="status">Broadcasting suspended: {access.reason}</p>}
+      {selectedID && !selected && <p role="status">This stream has ended or your participation has ended.</p>}
       {error && <p role="alert">{error}</p>}
       <form onSubmit={(event) => { event.preventDefault(); void action("create"); }}>
         <label>Stream title <input value={title} maxLength={200} required disabled={busy}
           onChange={(event) => { pending.current = null; setTitle(event.target.value); }} /></label>
-        <button disabled={busy || !title.trim()}>Create stream</button>
+        <button disabled={busy || !canPublish || !title.trim()}>Create stream</button>
       </form>
       <label>Stream <select value={selectedID} disabled={busy} onChange={(event) => setSelectedID(event.target.value)}>
         <option value="">Select a stream</option>
         {streams.map((stream) => <option key={stream.id} value={stream.id}>{stream.title} ({stream.state})</option>)}
       </select></label>
-      <StreamInvitations streamID={selected?.creatorId === selected?.publisherId && selected?.state !== "ended" ? selected?.id : undefined}
+      <StreamInvitations streamID={canPublish && selected?.creatorId === selected?.publisherId && selected?.state !== "ended" ? selected?.id : undefined}
         onChanged={() => { generation.current++; }} />
       {selected && (
         <section>
           <h3>{selected.title}</h3>
           <p role="status">{selected.state}</p>
-          <button disabled={busy || selected.state !== "ready" || selected.creatorId !== selected.publisherId} onClick={() => void action("start")}>Start stream</button>
+          {selected.endReason && <p role="status">Stream ended by staff: {selected.endReason}</p>}
+          <button disabled={busy || !canPublish || selected.state !== "ready" || selected.creatorId !== selected.publisherId} onClick={() => void action("start")}>Start stream</button>
           <button disabled={busy || selected.state === "ended" || selected.creatorId !== selected.publisherId} onClick={() => void action("end")}>End stream for everyone</button>
           {selected.creatorId !== selected.publisherId && selected.state !== "ended" && (
             <button disabled={busy} onClick={() => void action("leave")}>Leave stream</button>
           )}
-          {selected.state === "live" && <RelayConnection key={`publish-${selected.id}`}
+          {selected.state === "live" && canPublish && <RelayConnection key={`publish-${selected.id}`}
             streamID={selected.id} />}
           {selected.state === "live" && <LiveComments key={`comments-${selected.id}`} streamID={selected.id} />}
           {selected.state === "live" && <SharedStreamViewer key={`view-${selected.id}`} streamID={selected.id} ownAccountID={selected.publisherId} />}

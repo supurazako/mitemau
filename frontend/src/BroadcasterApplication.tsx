@@ -1,9 +1,11 @@
+import { BroadcastPermissionLookup } from "./BroadcastPermissionControl";
+import { ForceStreamEndLookup } from "./ForceStreamEnd";
 import { CommentPermissionLookup } from "./CommentPermissionControl";
 import StaffReports from "./StaffReports";
 import ModerationActivity from "./ModerationActivity";
 import { useEffect, useRef, useState } from "react";
 
-type Access = { status: "not_applied" | "pending" | "approved"; staff: boolean; accountId: string };
+type Access = { status: "not_applied" | "pending" | "approved" | "suspended"; staff: boolean; accountId: string; reason?: string | null };
 type Application = { accountId: string; email: string };
 
 export default function BroadcasterApplication() {
@@ -12,18 +14,20 @@ export default function BroadcasterApplication() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(true);
   const running = useRef(false);
+  const generation = useRef(0);
 
   async function refresh(signal?: AbortSignal) {
+    const version = ++generation.current;
     const response = await fetch("/api/account/broadcaster", { signal });
     if (!response.ok) throw new Error("Could not load broadcasting permission.");
     const next: Access = await response.json();
-    if (signal?.aborted) return;
+    if (signal?.aborted || version !== generation.current) return;
     setAccess(next);
     if (next.staff) {
       const list = await fetch("/api/staff/broadcasters", { signal });
       if (!list.ok) throw new Error("Could not load applications.");
       const pending: Application[] = await list.json();
-      if (!signal?.aborted) setApplications(pending);
+      if (!signal?.aborted && version === generation.current) setApplications(pending);
     }
   }
 
@@ -38,12 +42,20 @@ export default function BroadcasterApplication() {
         setBusy(false);
       }
     });
-    return () => controller.abort();
+    let polling = false;
+    const timer = window.setInterval(() => {
+      if (running.current || polling) return;
+      polling = true;
+      void refresh(controller.signal).catch(() => {}).finally(() => { polling = false; });
+    }, 2000);
+    const invalidate = () => { generation.current++; };
+    return () => { controller.abort(); window.clearInterval(timer); invalidate(); };
   }, []);
 
   async function perform(path?: string) {
     if (running.current) return;
     running.current = true;
+    generation.current++;
     setBusy(true);
     setError("");
     try {
@@ -75,6 +87,7 @@ export default function BroadcasterApplication() {
         </button>
       )}
       {access?.status === "pending" && <p role="status">Application pending approval</p>}
+      {access?.status === "suspended" && <p role="status">Broadcasting suspended: {access.reason}</p>}
       {access?.status === "approved" && <p role="status">Broadcasting permission granted</p>}
       {access?.staff && (
         <section>
@@ -90,7 +103,7 @@ export default function BroadcasterApplication() {
           ))}</ul>
         </section>
       )}
-      {access?.staff && <><StaffReports /><CommentPermissionLookup /><ModerationActivity /></>}
+      {access?.staff && <><StaffReports /><CommentPermissionLookup /><BroadcastPermissionLookup /><ForceStreamEndLookup /><ModerationActivity /></>}
     </section>
   );
 }

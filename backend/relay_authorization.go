@@ -43,7 +43,7 @@ func (s *broadcasterServer) authorizeRelay(w http.ResponseWriter, r *http.Reques
  JOIN stream_participants p ON p.stream_id=g.stream_id AND p.account_id=g.account_id
  JOIN broadcaster_applications b ON b.account_id=g.account_id
  WHERE g.token_hash=? AND g.revoked_at IS NULL AND s.state='live'
- AND p.left_at IS NULL AND b.approved_at IS NOT NULL`, tokenHash(input.Token)).Scan(&stream, &account, &session)
+ AND p.left_at IS NULL AND b.approved_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM account_broadcast_permissions bp WHERE bp.account_id=b.account_id AND bp.broadcasting_allowed=FALSE)`, tokenHash(input.Token)).Scan(&stream, &account, &session)
 	if err == sql.ErrNoRows {
 		problem(w, 403, "Publishing permission denied")
 		return
@@ -64,6 +64,10 @@ func (s *broadcasterServer) authorizeRelay(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	defer tx.Rollback()
+	if err = lockBroadcastAccounts(r.Context(), tx, account); err != nil {
+		problem(w, 503, "Publishing permission temporarily unavailable")
+		return
+	}
 	var state string
 	if err = tx.QueryRowContext(r.Context(), "SELECT state FROM live_streams WHERE id=? FOR UPDATE", stream).Scan(&state); err != nil {
 		problem(w, 503, "Publishing permission temporarily unavailable")
@@ -74,7 +78,7 @@ func (s *broadcasterServer) authorizeRelay(w http.ResponseWriter, r *http.Reques
 	err = tx.QueryRowContext(r.Context(), `SELECT g.session_id FROM stream_publishing_grants g
  JOIN stream_participants p ON p.stream_id=g.stream_id AND p.account_id=g.account_id
  JOIN broadcaster_applications b ON b.account_id=g.account_id
- WHERE g.token_hash=? AND g.revoked_at IS NULL AND (g.last_relay_seen_at IS NULL OR g.last_relay_seen_at>?) AND p.left_at IS NULL AND b.approved_at IS NOT NULL AND ?='live' FOR UPDATE`, tokenHash(input.Token), now.Add(-publisherLease), state).Scan(&authorizedSession)
+ WHERE g.token_hash=? AND g.revoked_at IS NULL AND (g.last_relay_seen_at IS NULL OR g.last_relay_seen_at>?) AND p.left_at IS NULL AND b.approved_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM account_broadcast_permissions bp WHERE bp.account_id=b.account_id AND bp.broadcasting_allowed=FALSE) AND ?='live' FOR UPDATE`, tokenHash(input.Token), now.Add(-publisherLease), state).Scan(&authorizedSession)
 	if err == sql.ErrNoRows {
 		problem(w, 403, "Publishing permission denied")
 		return
