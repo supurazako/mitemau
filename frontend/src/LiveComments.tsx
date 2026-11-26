@@ -18,6 +18,10 @@ export default function LiveComments({ streamID }: { streamID: string }) {
   const [body, setBody] = useState("");
   const [posting, setPosting] = useState(false);
   const [postStatus, setPostStatus] = useState("");
+  const [canDelete, setCanDelete] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteStatus, setDeleteStatus] = useState("");
+  const deletion = useRef<AbortController | null>(null);
   const pending = useRef<{ requestId: string; body: string } | null>(null);
   const running = useRef(false);
   const view = useRef<HTMLDivElement>(null);
@@ -112,6 +116,44 @@ export default function LiveComments({ streamID }: { streamID: string }) {
     return () => { lifetime.abort(); postRequest.current?.abort(); };
   }, [streamID]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    let loading = false;
+    async function refresh() {
+      if (loading) return;
+      loading = true;
+      try {
+        const response = await fetch(`/api/streams/${streamID}/comments/permissions`, { signal: controller.signal, cache: "no-store" });
+        const permitted = response.ok && (await response.json()).canDelete === true;
+        if (!controller.signal.aborted) setCanDelete(permitted);
+      } catch { if (!controller.signal.aborted) setCanDelete(false); }
+      finally { loading = false; }
+    }
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 2000);
+    return () => { controller.abort(); deletion.current?.abort(); window.clearInterval(timer); };
+  }, [streamID]);
+
+  async function removeComment(id: string) {
+    if (deletion.current || ended) return;
+    const controller = new AbortController(); deletion.current = controller;
+    setDeleting(id); setDeleteStatus("");
+    try {
+      const response = await fetch(`/api/streams/${streamID}/comments/${id}`, { method: "DELETE", signal: controller.signal, headers: { "Content-Type": "application/json" } });
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403 || response.status === 409) setCanDelete(false);
+        throw new Error((await response.json()).error || "Could not delete comment");
+      }
+      if (!controller.signal.aborted) setDeleteStatus("Comment deleted");
+      // The versioned MoQT snapshot updates every viewer, including this page.
+    } catch (cause) {
+      if (!controller.signal.aborted) setDeleteStatus(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      deletion.current = null;
+      if (!controller.signal.aborted) setDeleting(null);
+    }
+  }
+
   useEffect(() => { if (pinned.current && view.current) view.current.scrollTop = view.current.scrollHeight; }, [snapshot]);
 
   async function post() {
@@ -136,6 +178,7 @@ export default function LiveComments({ streamID }: { streamID: string }) {
       <ol>{snapshot?.comments.map((comment) => <li key={comment.id} data-comment-id={comment.id}>
         <AppLink href={`/${comment.accountId}`}>{comment.accountId.slice(0, 10)}</AppLink>{" "}<time dateTime={comment.postedAt}>{new Date(comment.postedAt).toLocaleTimeString()}</time>
         <p>{comment.body}</p>
+        {canDelete && !ended && <button type="button" disabled={deleting !== null} onClick={() => void removeComment(comment.id)} aria-label={`Delete comment by ${comment.accountId.slice(0, 10)} at ${new Date(comment.postedAt).toLocaleTimeString()}`}>{deleting === comment.id ? "Deleting…" : "Delete"}</button>}
       </li>)}</ol>
     </div>
     {!ended && <form onSubmit={(event) => { event.preventDefault(); void post(); }}>
@@ -144,6 +187,7 @@ export default function LiveComments({ streamID }: { streamID: string }) {
       <button disabled={posting || characters === 0 || characters > 500}>Post comment</button>
       <p>Posting requires sign-in. <AppLink href="/account">Account &amp; sign-in</AppLink></p>
     </form>}
+    {deleteStatus && <p role="status">{deleteStatus}</p>}
     {postStatus && <p role="status">{postStatus}</p>}
   </section>;
 }

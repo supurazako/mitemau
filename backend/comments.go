@@ -33,6 +33,8 @@ func (s *broadcasterServer) commentRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /public/streams/{id}/comments", s.publicComments)
 	mux.HandleFunc("GET /public/streams/{id}/comments/channel", s.commentChannel)
 	mux.HandleFunc("POST /streams/{id}/comments", s.p.verification.protect(s.postComment))
+	mux.HandleFunc("GET /streams/{id}/comments/permissions", s.commentPermissions)
+	mux.HandleFunc("DELETE /streams/{id}/comments/{comment}", s.p.verification.protect(s.deleteComment))
 	s.commentPublisherRoutes(mux)
 }
 func (s *broadcasterServer) publicComments(w http.ResponseWriter, r *http.Request) {
