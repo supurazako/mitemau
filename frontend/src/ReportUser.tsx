@@ -1,7 +1,7 @@
 import { useState } from "react";
 
-export default function ReportUser({ targetId, streamId, relatedCommentId }: { targetId: string; streamId?: string; relatedCommentId?: string }) {
-  const [open, setOpen] = useState(false);
+export default function ReportUser({ targetId, streamId, relatedCommentId, initiallyOpen = false }: { targetId: string; streamId?: string; relatedCommentId?: string; initiallyOpen?: boolean }) {
+  const [open, setOpen] = useState(initiallyOpen);
   const [reason, setReason] = useState("");
   const [incident, setIncident] = useState("");
   const [commentId, setCommentId] = useState(relatedCommentId || "");

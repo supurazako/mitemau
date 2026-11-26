@@ -92,7 +92,7 @@ func (s *broadcasterServer) createReport(w http.ResponseWriter, r *http.Request)
 	}
 	if comment != nil {
 		var owner, source []byte
-		err = tx.QueryRowContext(r.Context(), `SELECT c.account_id,c.stream_id FROM stream_comments c JOIN moderation_comment_content b ON b.comment_id=c.comment_id JOIN live_streams s ON s.id=c.stream_id WHERE c.comment_id=? AND b.hidden_at IS NULL AND s.state='live' FOR UPDATE`, comment).Scan(&owner, &source)
+		err = tx.QueryRowContext(r.Context(), `SELECT account_id,stream_id FROM moderation_comment_content WHERE comment_id=? AND (expires_at IS NULL OR expires_at>?) FOR UPDATE`, comment, now).Scan(&owner, &source)
 		if err == sql.ErrNoRows || (err == nil && (!bytes.Equal(owner, target) || (stream != nil && !bytes.Equal(stream, source)))) {
 			problem(w, 400, "Comment does not match the reported account and stream")
 			return
@@ -335,8 +335,12 @@ func (s *broadcasterServer) staffDeleteComment(w http.ResponseWriter, r *http.Re
 		problem(w, 503, "Could not delete comment")
 		return
 	}
+	err = retainCommentEvidence(r.Context(), tx, id, comment, accepted, now)
+	if err != nil {
+		problem(w, 503, "Could not retain evidence")
+		return
+	}
 	if !hidden.Valid {
-		err = retainCommentEvidence(r.Context(), tx, id, comment, accepted, now)
 		if err == nil {
 			err = hideCommentContent(r.Context(), tx, comment, now)
 		}

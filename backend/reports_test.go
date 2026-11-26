@@ -81,3 +81,58 @@ func TestReportsMySQL(t *testing.T) {
 		t.Fatal("retention", count, err)
 	}
 }
+
+func TestReportRetainedCommentMySQL(t *testing.T) {
+	f := moderationDB(t)
+	stream := createCommentStream(t, f)
+	if w := f.call("POST", "/streams/"+stream+"/comments", f.userToken, postCommentBody(hex.EncodeToString(randomModerationID(16)), "hidden evidence")); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	comment := getCommentSnapshot(t, f, stream).Comments[0].ID
+	if w := f.call("DELETE", "/streams/"+stream+"/comments/"+comment, f.userToken, ""); w.Code != 204 {
+		t.Fatal(w.Code)
+	}
+	if w := f.call("POST", "/streams/"+stream+"/end", f.userToken, "{}"); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	payload, _ := json.Marshal(map[string]string{"targetId": hex.EncodeToString(f.user), "reason": "after deletion", "incidentAt": f.now.Format(time.RFC3339Nano), "commentId": comment})
+	w := f.call("POST", "/reports", f.guestToken, string(payload))
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var result struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &result)
+	raw, _ := streamID(result.ID)
+	defer f.db.Exec("DELETE FROM user_reports WHERE id=?", raw)
+	var body string
+	if err := f.db.QueryRow("SELECT body FROM moderation_evidence WHERE report_id=?", raw).Scan(&body); err != nil || body != "hidden evidence" {
+		t.Fatal(body, err)
+	}
+
+	// A staff member may attach an already-hidden comment during investigation.
+	f.now = f.now.Add(time.Minute)
+	withoutComment, _ := json.Marshal(map[string]string{"targetId": hex.EncodeToString(f.user), "reason": "investigate hidden content", "incidentAt": f.now.Format(time.RFC3339Nano)})
+	w = f.call("POST", "/reports", f.guestToken, string(withoutComment))
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var later struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &later)
+	laterRaw, _ := streamID(later.ID)
+	defer f.db.Exec("DELETE FROM user_reports WHERE id=?", laterRaw)
+	w = f.call("POST", "/staff/reports/"+later.ID+"/delete-comment", f.staffToken, `{"commentId":"`+comment+`"}`)
+	if w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if err := f.db.QueryRow("SELECT body FROM moderation_evidence WHERE report_id=?", laterRaw).Scan(&body); err != nil || body != "hidden evidence" {
+		t.Fatal("staff evidence", body, err)
+	}
+	f.now = f.now.Add(commentRetention)
+	if w = f.call("POST", "/reports", f.guestToken, string(payload)); w.Code != 400 {
+		t.Fatal("expired body accepted", w.Code)
+	}
+}
