@@ -127,8 +127,16 @@ func (s *broadcasterServer) participation(w http.ResponseWriter, r *http.Request
 				problem(w, 403, "Invitation required")
 				return
 			}
-			_, err = tx.ExecContext(r.Context(), `INSERT INTO stream_participants(stream_id,account_id,joined_at,left_at) VALUES (?,?,?,NULL)
+			var changed sql.Result
+			changed, err = tx.ExecContext(r.Context(), `INSERT INTO stream_participants(stream_id,account_id,joined_at,left_at) VALUES (?,?,?,NULL)
     ON DUPLICATE KEY UPDATE joined_at=IF(left_at IS NULL,joined_at,VALUES(joined_at)),left_at=NULL`, id, actor, now)
+			if err == nil {
+				var count int64
+				count, err = changed.RowsAffected()
+				if err == nil && count > 0 {
+					_, err = recordActivity(r.Context(), tx, "participant_joined", actor, actor, id, nil, nil, now)
+				}
+			}
 		}
 	case "leave":
 		_, err = tx.ExecContext(r.Context(), "UPDATE stream_publishing_grants SET revoked_at=COALESCE(revoked_at,?) WHERE stream_id=? AND account_id=?", now, id, actor)
@@ -136,7 +144,15 @@ func (s *broadcasterServer) participation(w http.ResponseWriter, r *http.Request
 			problem(w, 503, "Could not revoke publishing")
 			return
 		}
-		_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET left_at=?,publisher_namespace=NULL,publisher_seen_at=NULL,publishing_state='stopped' WHERE stream_id=? AND account_id=? AND left_at IS NULL", now, id, actor)
+		var changed sql.Result
+		changed, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET left_at=?,publisher_namespace=NULL,publisher_seen_at=NULL,publishing_state='stopped' WHERE stream_id=? AND account_id=? AND left_at IS NULL", now, id, actor)
+		if err == nil {
+			var count int64
+			count, err = changed.RowsAffected()
+			if err == nil && count > 0 {
+				_, err = recordActivity(r.Context(), tx, "participant_left", actor, actor, id, nil, nil, now)
+			}
+		}
 	}
 	if err != nil {
 		problem(w, 503, "Could not update participation")

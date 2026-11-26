@@ -60,6 +60,7 @@ func TestBroadcastersMySQL(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer db.Exec("DELETE FROM accounts WHERE id=?", id)
+		defer db.Exec("DELETE FROM moderation_events WHERE account_id=?", id)
 		_, err = db.Exec("INSERT INTO account_sessions(token_hash,account_id,expires_at,absolute_expires_at) VALUES (?,?,?,?)", tokenHash(token), id, now.Add(time.Hour), now.Add(time.Hour))
 		if err != nil {
 			t.Fatal(err)

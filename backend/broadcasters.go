@@ -31,6 +31,7 @@ func parseStaffIDs(value string) (map[string]bool, error) {
 
 func (s *broadcasterServer) routes(mux *http.ServeMux) {
 	s.streamRoutes(mux)
+	s.moderationRoutes(mux)
 	mux.HandleFunc("GET /account/broadcaster", s.status)
 	mux.HandleFunc("POST /account/broadcaster", s.p.verification.protect(s.apply))
 	mux.HandleFunc("GET /staff/broadcasters", s.list)
@@ -139,7 +140,14 @@ func (s *broadcasterServer) approve(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &input) {
 		return
 	}
-	result, err := s.p.verification.db.ExecContext(r.Context(), "UPDATE broadcaster_applications SET approved_at=?,approved_by=? WHERE account_id=? AND approved_at IS NULL", s.p.verification.now(), staff, id)
+	tx, err := s.p.verification.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		problem(w, 503, "Could not approve application")
+		return
+	}
+	defer tx.Rollback()
+	now := s.p.verification.now()
+	result, err := tx.ExecContext(r.Context(), "UPDATE broadcaster_applications SET approved_at=?,approved_by=? WHERE account_id=? AND approved_at IS NULL", now, staff, id)
 	if err != nil {
 		problem(w, 503, "Could not approve application")
 		return
@@ -151,6 +159,14 @@ func (s *broadcasterServer) approve(w http.ResponseWriter, r *http.Request) {
 	}
 	if count == 0 {
 		problem(w, 409, "Application is not pending")
+		return
+	}
+	if _, err = recordActivity(r.Context(), tx, "broadcaster_approved", staff, id, nil, nil, nil, now); err != nil {
+		problem(w, 503, "Could not record approval")
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		problem(w, 503, "Could not approve application")
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": "approved"})

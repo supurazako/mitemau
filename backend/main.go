@@ -81,6 +81,7 @@ func main() {
 	broadcasters := &broadcasterServer{p: passkeys, staffIDs: staffIDs, relayAuthKey: relayKey}
 	broadcasters.routes(mux)
 	go broadcasters.runPublisherCleanup(context.Background())
+	go broadcasters.runModerationCleanup(context.Background())
 	verification.registeredEmail = passkeys.registeredEmail
 	go verification.runCleanup(context.Background())
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {

@@ -1,3 +1,4 @@
+import ModerationActivity from "./ModerationActivity";
 import { useEffect, useRef, useState } from "react";
 
 type Access = { status: "not_applied" | "pending" | "approved"; staff: boolean; accountId: string };
@@ -87,6 +88,7 @@ export default function BroadcasterApplication() {
           ))}</ul>
         </section>
       )}
+      {access?.staff && <ModerationActivity />}
     </section>
   );
 }
