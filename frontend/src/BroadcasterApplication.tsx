@@ -1,3 +1,4 @@
+import StaffReports from "./StaffReports";
 import ModerationActivity from "./ModerationActivity";
 import { useEffect, useRef, useState } from "react";
 
@@ -88,7 +89,7 @@ export default function BroadcasterApplication() {
           ))}</ul>
         </section>
       )}
-      {access?.staff && <ModerationActivity />}
+      {access?.staff && <><StaffReports /><ModerationActivity /></>}
     </section>
   );
 }

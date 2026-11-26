@@ -1,3 +1,4 @@
+import ReportUser from "./ReportUser";
 import LiveComments from "./LiveComments";
 import { useEffect, useState } from "react";
 import CameraViewer from "./CameraViewer";
@@ -121,6 +122,7 @@ export function UserPage({ accountID }: { accountID: string }) {
     {resource.unavailable && <p role="status">User not found.</p>}
     {resource.data && <>
       <p role="status">{resource.data.stream ? "Online" : "Offline"}</p>
+      <ReportUser targetId={accountID} streamId={resource.data.stream?.id} />
       {resource.data.stream && <StreamPlayback key={resource.data.stream.id} streamID={resource.data.stream.id} />}
     </>}
   </main>;

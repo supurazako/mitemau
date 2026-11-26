@@ -1,3 +1,4 @@
+import ReportUser from "./ReportUser";
 import { useEffect, useRef, useState } from "react";
 import { FullTrackName } from "moqtail";
 import { AppLink } from "./AppLink";
@@ -178,6 +179,7 @@ export default function LiveComments({ streamID }: { streamID: string }) {
       <ol>{snapshot?.comments.map((comment) => <li key={comment.id} data-comment-id={comment.id}>
         <AppLink href={`/${comment.accountId}`}>{comment.accountId.slice(0, 10)}</AppLink>{" "}<time dateTime={comment.postedAt}>{new Date(comment.postedAt).toLocaleTimeString()}</time>
         <p>{comment.body}</p>
+        <ReportUser targetId={comment.accountId} streamId={streamID} relatedCommentId={comment.id} />
         {canDelete && !ended && <button type="button" disabled={deleting !== null} onClick={() => void removeComment(comment.id)} aria-label={`Delete comment by ${comment.accountId.slice(0, 10)} at ${new Date(comment.postedAt).toLocaleTimeString()}`}>{deleting === comment.id ? "Deleting…" : "Delete"}</button>}
       </li>)}</ol>
     </div>

@@ -23,3 +23,9 @@ The public comment API and actual comment/report/moderation product flows are im
 ## Investigation
 
 `GET /staff/activity` and `GET /staff/evidence` require a current staff session and `accountId`, `from`, `to` (RFC3339, inclusive start/exclusive end), plus optional `streamId` and `before` cursor. Each returns at most 50 records ordered by descending event ID, with `nextCursor` for older records. Evidence filters use the original event's occurrence time. A comment body omitted by retention is returned as null. Evidence includes its report ID and expiry so staff can distinguish it from the original event.
+
+## User reports
+
+Signed-in accounts may report another account once per minute. A reason and incident time are required; a live comment and its stream can be attached as context. The server validates the comment belongs to the reported account and snapshots its body when accepting the report. Staff can review reports, inspect retained evidence and account activity, remove a comment by the reported user, and record an outcome. Staff deletion increments the live comment version and records the action in the same transaction.
+
+Reports and their evidence expire 180 days after acceptance, including unresolved reports. A recorded outcome and its action event expire 180 days after the action, even when the original report has already expired. The staff activity search exposes the retained outcome. Comment content independently follows the 30-day hidden-content retention policy. The staff queue and report evidence APIs enforce staff authorization and do not return expired reports.
