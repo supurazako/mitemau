@@ -85,7 +85,7 @@ func retainCommentEvidence(ctx context.Context, tx *sql.Tx, report, comment []by
 
 func (s *broadcasterServer) cleanupModeration(ctx context.Context) error {
 	now := s.p.verification.now()
-	for _, table := range []string{"moderation_evidence", "moderation_comment_content", "moderation_events", "user_reports", "report_outcomes", "comment_permission_actions"} {
+	for _, table := range []string{"moderation_evidence", "moderation_comment_content", "moderation_events", "user_reports", "report_outcomes", "comment_permission_actions", "broadcast_permission_actions", "stream_termination_notices"} {
 		if _, err := s.p.verification.db.ExecContext(ctx, "DELETE FROM "+table+" WHERE expires_at<=? LIMIT 1000", now); err != nil {
 			return err
 		}

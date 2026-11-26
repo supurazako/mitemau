@@ -34,6 +34,7 @@ func (s *broadcasterServer) routes(mux *http.ServeMux) {
 	s.moderationRoutes(mux)
 	s.reportRoutes(mux)
 	s.commentRestrictionRoutes(mux)
+	s.broadcastRestrictionRoutes(mux)
 	s.commentRoutes(mux)
 	mux.HandleFunc("GET /account/broadcaster", s.status)
 	mux.HandleFunc("POST /account/broadcaster", s.p.verification.protect(s.apply))
@@ -66,6 +67,7 @@ func (s *broadcasterServer) authenticate(w http.ResponseWriter, r *http.Request,
 }
 
 func (s *broadcasterServer) status(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	id, ok := s.authenticate(w, r, false)
 	if !ok {
 		return
@@ -82,7 +84,21 @@ func (s *broadcasterServer) status(w http.ResponseWriter, r *http.Request) {
 		problem(w, 503, "Application is temporarily unavailable")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"status": status, "staff": s.staffIDs[hex.EncodeToString(id)], "accountId": hex.EncodeToString(id)})
+	var allowed sql.NullBool
+	var reason sql.NullString
+	err = s.p.verification.db.QueryRowContext(r.Context(), "SELECT broadcasting_allowed,suspension_reason FROM account_broadcast_permissions WHERE account_id=?", id).Scan(&allowed, &reason)
+	if err != nil && err != sql.ErrNoRows {
+		problem(w, 503, "Could not check broadcasting permission")
+		return
+	}
+	var publicReason *string
+	if allowed.Valid && !allowed.Bool {
+		status = "suspended"
+		if reason.Valid {
+			publicReason = &reason.String
+		}
+	}
+	writeJSON(w, 200, map[string]any{"status": status, "staff": s.staffIDs[hex.EncodeToString(id)], "accountId": hex.EncodeToString(id), "reason": publicReason})
 }
 
 func (s *broadcasterServer) apply(w http.ResponseWriter, r *http.Request) {

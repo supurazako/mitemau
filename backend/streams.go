@@ -11,11 +11,12 @@ import (
 )
 
 type liveStream struct {
-	ID          string `json:"id"`
-	CreatorID   string `json:"creatorId"`
-	Title       string `json:"title"`
-	State       string `json:"state"`
-	PublisherID string `json:"publisherId"`
+	ID          string  `json:"id"`
+	CreatorID   string  `json:"creatorId"`
+	Title       string  `json:"title"`
+	State       string  `json:"state"`
+	PublisherID string  `json:"publisherId"`
+	EndReason   *string `json:"endReason,omitempty"`
 }
 
 func (s *broadcasterServer) streamRoutes(mux *http.ServeMux) {
@@ -32,10 +33,11 @@ func (s *broadcasterServer) ownedStreams(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	rows, err := s.p.verification.db.QueryContext(r.Context(), `SELECT s.id,s.creator_id,s.title,s.state FROM live_streams s
+	rows, err := s.p.verification.db.QueryContext(r.Context(), `SELECT s.id,s.creator_id,s.title,s.state,n.reason FROM live_streams s
+ LEFT JOIN stream_termination_notices n ON n.stream_id=s.id AND n.expires_at>?
  LEFT JOIN stream_participants p ON p.stream_id=s.id AND p.account_id=?
- WHERE s.creator_id=? OR (p.account_id IS NOT NULL AND p.left_at IS NULL)
- ORDER BY s.created_at DESC,s.id`, id, id)
+ WHERE s.creator_id=? OR (p.account_id IS NOT NULL AND (p.left_at IS NULL OR n.stream_id IS NOT NULL))
+ ORDER BY s.created_at DESC,s.id`, s.p.verification.now(), id, id)
 	if err != nil {
 		problem(w, 503, "Could not load streams")
 		return
@@ -45,9 +47,13 @@ func (s *broadcasterServer) ownedStreams(w http.ResponseWriter, r *http.Request)
 	for rows.Next() {
 		var raw, creator []byte
 		var item liveStream
-		if err = rows.Scan(&raw, &creator, &item.Title, &item.State); err != nil {
+		var reason sql.NullString
+		if err = rows.Scan(&raw, &creator, &item.Title, &item.State, &reason); err != nil {
 			problem(w, 503, "Could not load streams")
 			return
+		}
+		if reason.Valid {
+			item.EndReason = &reason.String
 		}
 		item.ID = hex.EncodeToString(raw)
 		item.CreatorID = hex.EncodeToString(creator)
@@ -100,7 +106,7 @@ func (s *broadcasterServer) createStream(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var approved int
-	if err = tx.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM broadcaster_applications WHERE account_id=? AND approved_at IS NOT NULL", actor).Scan(&approved); err != nil {
+	if err = tx.QueryRowContext(r.Context(), approvedBroadcastSQL, actor).Scan(&approved); err != nil {
 		problem(w, 503, "Could not check permission")
 		return
 	}
@@ -172,6 +178,12 @@ func (s *broadcasterServer) transitionStream(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	defer tx.Rollback()
+	if target == "live" {
+		if err = lockBroadcastAccounts(r.Context(), tx, actor); err != nil {
+			problem(w, 503, "Could not check broadcasting permission")
+			return
+		}
+	}
 	var creator []byte
 	var item liveStream
 	err = tx.QueryRowContext(r.Context(), "SELECT creator_id,title,state FROM live_streams WHERE id=? FOR UPDATE", id).Scan(&creator, &item.Title, &item.State)
@@ -189,7 +201,7 @@ func (s *broadcasterServer) transitionStream(w http.ResponseWriter, r *http.Requ
 	}
 	if target == "live" {
 		var approved int
-		if err = tx.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM broadcaster_applications WHERE account_id=? AND approved_at IS NOT NULL", actor).Scan(&approved); err != nil {
+		if err = tx.QueryRowContext(r.Context(), approvedBroadcastSQL, actor).Scan(&approved); err != nil {
 			problem(w, 503, "Could not check permission")
 			return
 		}
@@ -207,54 +219,12 @@ func (s *broadcasterServer) transitionStream(w http.ResponseWriter, r *http.Requ
 		if target == "live" {
 			_, err = tx.ExecContext(r.Context(), "UPDATE live_streams SET state='live',started_at=? WHERE id=?", now, id)
 		} else {
-			rows, loadErr := tx.QueryContext(r.Context(), "SELECT account_id FROM stream_participants WHERE stream_id=? AND left_at IS NULL", id)
-			if loadErr != nil {
-				problem(w, 503, "Could not load departures")
-				return
-			}
-			var departing [][]byte
-			for rows.Next() {
-				var account []byte
-				if loadErr = rows.Scan(&account); loadErr != nil {
-					break
-				}
-				departing = append(departing, account)
-			}
-			if loadErr == nil {
-				loadErr = rows.Err()
-			}
-			rows.Close()
-			if loadErr != nil {
-				problem(w, 503, "Could not load departures")
-				return
-			}
-			for _, account := range departing {
-				if _, err = recordActivity(r.Context(), tx, "participant_left", actor, account, id, nil, nil, now); err != nil {
-					problem(w, 503, "Could not record departure")
-					return
-				}
-			}
-			_, err = tx.ExecContext(r.Context(), "UPDATE live_streams SET state='ended',ended_at=? WHERE id=?", now, id)
-			if err == nil {
-				_, err = tx.ExecContext(r.Context(), "UPDATE stream_publishing_grants SET revoked_at=COALESCE(revoked_at,?) WHERE stream_id=?", now, id)
-			}
-			if err == nil {
-				_, err = tx.ExecContext(r.Context(), "UPDATE stream_participants SET left_at=?,publisher_namespace=NULL,publisher_seen_at=NULL,publishing_state='stopped' WHERE stream_id=? AND left_at IS NULL", now, id)
-			}
+			_, err = finishStream(r.Context(), tx, id, actor, creator, nil, "stream_ended", now)
 		}
-		if err == nil {
-			kind := "stream_started"
-			if target == "ended" {
-				kind = "stream_ended"
-			}
-			_, err = recordActivity(r.Context(), tx, kind, actor, creator, id, nil, nil, now)
+		if err == nil && target == "live" {
+			_, err = recordActivity(r.Context(), tx, "stream_started", actor, creator, id, nil, nil, now)
 		}
-		if err == nil && target == "ended" {
-			_, err = tx.ExecContext(r.Context(), "DELETE FROM stream_comment_publications WHERE stream_id=?", id)
-		}
-		if err == nil && target == "ended" {
-			err = hideStreamCommentContent(r.Context(), tx, id, now)
-		}
+
 		if err != nil {
 			problem(w, 503, "Could not update stream")
 			return

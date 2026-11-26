@@ -102,6 +102,10 @@ func (s *broadcasterServer) publishing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
+	if err = lockBroadcastAccounts(r.Context(), tx, actor); err != nil {
+		problem(w, 503, "Could not check publishing permission")
+		return
+	}
 	var state string
 	err = tx.QueryRowContext(r.Context(), "SELECT state FROM live_streams WHERE id=? FOR UPDATE", id).Scan(&state)
 	if err == sql.ErrNoRows {
@@ -132,7 +136,7 @@ func (s *broadcasterServer) publishing(w http.ResponseWriter, r *http.Request) {
 		}
 		var allowed int
 		err = tx.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM stream_participants p JOIN broadcaster_applications b ON b.account_id=p.account_id
- WHERE p.stream_id=? AND p.account_id=? AND p.left_at IS NULL AND b.approved_at IS NOT NULL`, id, actor).Scan(&allowed)
+ WHERE p.stream_id=? AND p.account_id=? AND p.left_at IS NULL AND b.approved_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM account_broadcast_permissions bp WHERE bp.account_id=p.account_id AND bp.broadcasting_allowed=FALSE)`, id, actor).Scan(&allowed)
 		if err != nil {
 			problem(w, 503, "Could not check publishing permission")
 			return

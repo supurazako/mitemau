@@ -1,0 +1,3 @@
+DROP TABLE stream_termination_notices;
+DROP TABLE broadcast_permission_actions;
+DROP TABLE account_broadcast_permissions;

@@ -66,12 +66,31 @@ func (s *broadcasterServer) participation(w http.ResponseWriter, r *http.Request
 	if !decodeBody(w, r, &input) {
 		return
 	}
+	target := actor
+	if operation == "invite" {
+		target, err = hex.DecodeString(input.AccountID)
+		if err != nil || len(target) != 32 {
+			problem(w, 400, "Invalid account ID")
+			return
+		}
+	}
+
 	tx, err := s.p.verification.db.BeginTx(r.Context(), nil)
 	if err != nil {
 		problem(w, 503, "Could not update participation")
 		return
 	}
 	defer tx.Rollback()
+	if operation != "leave" {
+		if err = lockBroadcastAccounts(r.Context(), tx, actor, target); err != nil {
+			if err == sql.ErrNoRows {
+				problem(w, 403, "Broadcasting permission required")
+			} else {
+				problem(w, 503, "Could not check broadcasting permission")
+			}
+			return
+		}
+	}
 	var creator []byte
 	var state string
 	err = tx.QueryRowContext(r.Context(), "SELECT creator_id,state FROM live_streams WHERE id=? FOR UPDATE", id).Scan(&creator, &state)
@@ -83,21 +102,13 @@ func (s *broadcasterServer) participation(w http.ResponseWriter, r *http.Request
 		problem(w, 503, "Could not update participation")
 		return
 	}
-	target := actor
-	if operation == "invite" {
-		if !bytes.Equal(creator, actor) {
-			problem(w, 403, "Only the creator can invite")
-			return
-		}
-		target, err = hex.DecodeString(input.AccountID)
-		if err != nil || len(target) != 32 {
-			problem(w, 400, "Invalid account ID")
-			return
-		}
-		if bytes.Equal(target, actor) {
-			problem(w, 409, "The creator already participates")
-			return
-		}
+	if operation == "invite" && !bytes.Equal(creator, actor) {
+		problem(w, 403, "Only the creator can invite")
+		return
+	}
+	if operation == "invite" && bytes.Equal(target, actor) {
+		problem(w, 409, "The creator already participates")
+		return
 	}
 	if state == "ended" && operation != "leave" {
 		problem(w, 409, "This stream has ended")
@@ -107,13 +118,23 @@ func (s *broadcasterServer) participation(w http.ResponseWriter, r *http.Request
 	switch operation {
 	case "invite", "join":
 		var approved int
-		if err = tx.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM broadcaster_applications WHERE account_id=? AND approved_at IS NOT NULL", target).Scan(&approved); err != nil {
+		if err = tx.QueryRowContext(r.Context(), approvedBroadcastSQL, target).Scan(&approved); err != nil {
 			problem(w, 503, "Could not check permission")
 			return
 		}
 		if approved == 0 {
 			problem(w, 403, "Broadcasting permission required")
 			return
+		}
+		if operation == "invite" {
+			if err = tx.QueryRowContext(r.Context(), approvedBroadcastSQL, actor).Scan(&approved); err != nil {
+				problem(w, 503, "Could not check permission")
+				return
+			}
+			if approved == 0 {
+				problem(w, 403, "Broadcasting permission required")
+				return
+			}
 		}
 		if operation == "invite" {
 			_, err = tx.ExecContext(r.Context(), "INSERT INTO stream_invitations(stream_id,account_id,invited_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE account_id=VALUES(account_id)", id, target, now)
