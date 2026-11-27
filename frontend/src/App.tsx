@@ -4,6 +4,7 @@ import AccountPage from "./AccountPage";
 import { useSyncExternalStore } from "react";
 import { AppLink } from "./AppLink";
 import { LiveList, UserPage } from "./PublicStreams";
+import { ViewerProvider } from "./ViewerContext";
 
 function subscribeToPath(onChange: () => void) {
   window.addEventListener("popstate", onChange);
@@ -24,7 +25,7 @@ export default function App() {
   else if (user) page = <UserPage key={user[1]} accountID={user[1]} />;
   else page = <main className="public-page"><h1>Page not found</h1><AppLink href="/">Browse live streams</AppLink></main>;
 
-  return <>
+  return <ViewerProvider>
     <header className="site-header">
       <AppLink href="/" className="site-name">Mitemau</AppLink>
       <nav aria-label="Main navigation">
@@ -34,5 +35,5 @@ export default function App() {
       </nav>
     </header>
     <ReportComposer key={accountPage ? "/account" : path}>{page}</ReportComposer>
-  </>;
+  </ViewerProvider>;
 }

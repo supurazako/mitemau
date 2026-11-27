@@ -64,6 +64,18 @@ Keep report and moderation actions near the relevant person or comment, visually
 
 Announce meaningful changes with a status region and use alerts for actionable errors. Avoid repeatedly announcing unchanged statuses. For forms, keep entered values on recoverable errors and show the reason when an action is unavailable.
 
+## Availability
+
+Render an action only when the current viewer can perform it. Do not show permission-gated controls as disabled placeholders: hide the entry point, or replace it with a short explanation and the next valid step.
+
+- Signed-out visitors do not see report or invitation actions; comment posting shows a sign-in prompt.
+- Broadcasters without approval see their application status instead of stream setup.
+- Suspended accounts see the restriction reason instead of a disabled composer or sender.
+- Viewers see delete and staff controls only when the server grants them.
+- Public pages show invitation shortcuts only to approved broadcasters, and never for their own page.
+
+State-gated controls, such as Connect before a live stream or Submit before required fields, may remain visible when the reason and next action are clear. Hiding a control is not authorization; every action is still checked by the server.
+
 ## Order of application
 
 1. **Public:** apply the shared shell and live cards, then the watch layout, chat, and playback states. Review signed-out discovery, a single live stream, a shared stream, and empty, offline, and disconnected states at desktop widths.

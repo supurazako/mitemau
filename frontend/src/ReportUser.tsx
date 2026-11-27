@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { AppLink } from "./AppLink";
+import { useViewer } from "./lib/viewer";
 
 import type { LiveComment } from "./lib/comments";
 
@@ -10,6 +11,7 @@ export default function ReportUser({ targetId, streamId, streamTitle, relatedCom
   relatedComment?: LiveComment;
   openRequest?: number;
 }) {
+  const viewer = useViewer();
   const dialog = useRef<HTMLDialogElement>(null);
   const headingId = useId();
   useEffect(() => {
@@ -19,7 +21,7 @@ export default function ReportUser({ targetId, streamId, streamTitle, relatedCom
   const [author, setAuthor] = useState<{ displayName?: string; displayId?: string }>();
   const authorId = relatedComment?.accountId;
   useEffect(() => {
-    if (!authorId) return;
+    if (!authorId || !viewer.signedIn) return;
     const controller = new AbortController();
     async function loadAuthor() {
       try {
@@ -35,7 +37,7 @@ export default function ReportUser({ targetId, streamId, streamTitle, relatedCom
     }
     void loadAuthor();
     return () => controller.abort();
-  }, [authorId]);
+  }, [authorId, viewer.signedIn]);
   const [incident, setIncident] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -49,13 +51,14 @@ export default function ReportUser({ targetId, streamId, streamTitle, relatedCom
     } catch (cause) { setStatus(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   }
+  if (!viewer.ready || !viewer.signedIn || viewer.accountId === targetId) return null;
   return <section className="report-user" aria-label="Report user">
     {!relatedComment && <button type="button" aria-haspopup="dialog" onClick={() => { setStatus(""); dialog.current?.showModal(); }}>Report user</button>}
     <dialog ref={dialog} className="report-dialog" aria-labelledby={headingId}
       onCancel={(event) => { if (busy) event.preventDefault(); }}>
       <h2 id={headingId}>Report user</h2>
       <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-        <p>Sign in to report this user. Reports are reviewed by staff.</p>
+        <p>Reports are reviewed by staff.</p>
         {relatedComment && <figure className="report-comment-preview">
           <figcaption>
             <AppLink href={author?.displayId ? `/users/${author.displayId}` : `/${relatedComment.accountId}`}>

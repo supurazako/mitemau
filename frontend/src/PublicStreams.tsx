@@ -3,6 +3,7 @@ import LiveComments from "./LiveComments";
 import { useEffect, useState } from "react";
 import CameraViewer from "./CameraViewer";
 import { AppLink } from "./AppLink";
+import { useViewer } from "./lib/viewer";
 
 type PublicStream = { id: string; creatorId: string; title: string };
 type LiveListing = PublicStream & { watchAccountId: string | null };
@@ -130,6 +131,7 @@ function StreamPlayback({ stream, accountID, profileName }: { stream: PublicStre
 }
 
 export function UserPage({ accountID }: { accountID: string }) {
+  const viewer = useViewer();
   const resource = usePublicResource<UserStream>(`/api/public/${accountID.length === 64 ? "users" : "profiles"}/${accountID}`);
   const profile = resource.data;
   const profileName = profile?.displayName || profile?.displayId || "User";
@@ -139,7 +141,8 @@ export function UserPage({ accountID }: { accountID: string }) {
     {resource.loading && !resource.data && <p className="public-notice" role="status">Loading user stream…</p>}
     <LoadError message={resource.error} reload={resource.reload} />
     {resource.unavailable && <p role="status">User not found.</p>}
-    {resource.data && <AppLink href={`/broadcasting/invitations/${resource.data.accountId}`}>Invite to a stream</AppLink>}
+    {resource.data && viewer.signedIn && viewer.canBroadcast && viewer.accountId !== resource.data.accountId &&
+      <AppLink href={`/broadcasting/invitations/${resource.data.accountId}`}>Invite to a stream</AppLink>}
     {resource.data?.stream
       ? <StreamPlayback key={resource.data.stream.id} stream={resource.data.stream} accountID={resource.data.accountId} profileName={profileName} />
       : resource.data && <div className="public-notice">

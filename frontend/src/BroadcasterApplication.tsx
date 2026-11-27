@@ -3,6 +3,7 @@ import { ForceStreamEndLookup } from "./ForceStreamEnd";
 import { CommentPermissionLookup } from "./CommentPermissionControl";
 import StaffReports from "./StaffReports";
 import ModerationActivity from "./ModerationActivity";
+import { notifySessionChange } from "./useSessionActivity";
 import { useEffect, useRef, useState } from "react";
 
 type Access = { status: "not_applied" | "pending" | "approved" | "suspended"; staff: boolean; accountId: string; reason?: string | null };
@@ -68,6 +69,7 @@ export default function BroadcasterApplication() {
         if (!response.ok) throw new Error((await response.json()).error || "Request failed.");
       }
       await refresh();
+      notifySessionChange();
     } catch (cause) {
       setError(String(cause));
     } finally {

@@ -57,28 +57,37 @@ export default function StreamInvitations({ invitee, hostStream, activeStreamId,
       <h3>Collaboration invitations</h3>
       {notice && <p role="status">{notice}</p>}
       {error && <p role="alert">{error}</p>}
-      {canPublish && (invitee ? <InviteToStream invitee={invitee} hostStream={hostStream}
-        busy={busy} onInvite={(stream, accountId) => void act(`/api/streams/${stream}/invite`, { accountId })} />
-        : <form onSubmit={(event) => {
-          event.preventDefault();
-          const id = displayID.trim().replace(/^@/, "").toLowerCase();
-          if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(id)) {
-            setError("Enter a valid display ID.");
-            return;
-          }
-          window.history.pushState(null, "", `/broadcasting/invitations/@${id}`);
-          window.dispatchEvent(new PopStateEvent("popstate"));
-        }}>
-          <label>Display ID <input required value={displayID} autoCapitalize="none" spellCheck={false}
-            onChange={(event) => setDisplayID(event.target.value)} /></label>
-          <button>Find user</button>
-        </form>)}
-      {invitations.length > 0 && <ul>{invitations.map((invitation) => <li key={invitation.id}>
-        {invitation.title} <button disabled={busy || !canPublish || (!!activeStreamId && activeStreamId !== invitation.id)} onClick={() => void act(`/api/streams/${invitation.id}/join`, {})}>Accept invitation</button>
-      </li>)}</ul>}
-      {invitations.some(invitation => activeStreamId && invitation.id !== activeStreamId) &&
-        <p>End or leave your current stream before joining another.</p>}
-      {invitations.length === 0 && <p>No pending invitations</p>}
+      {!canPublish && <p role="status">
+        Broadcasting permission is unavailable for this account, so invitations cannot be accepted.
+        Check your <AppLink href="/broadcasting">studio</AppLink> for details.
+      </p>}
+      {canPublish && <>
+        {invitee
+          ? <InviteToStream invitee={invitee} hostStream={hostStream}
+            busy={busy} onInvite={(stream, accountId) => void act(`/api/streams/${stream}/invite`, { accountId })} />
+          : hostStream
+            ? <form onSubmit={(event) => {
+              event.preventDefault();
+              const id = displayID.trim().replace(/^@/, "").toLowerCase();
+              if (!/^[a-z0-9][a-z0-9_-]{2,23}$/.test(id)) {
+                setError("Enter a valid display ID.");
+                return;
+              }
+              window.history.pushState(null, "", `/broadcasting/invitations/@${id}`);
+              window.dispatchEvent(new PopStateEvent("popstate"));
+            }}>
+              <label>Display ID <input required value={displayID} autoCapitalize="none" spellCheck={false}
+                onChange={(event) => setDisplayID(event.target.value)} /></label>
+              <button>Find user</button>
+            </form>
+            : <p>Go live from your <AppLink href="/broadcasting">studio</AppLink> to invite someone.</p>}
+        {invitations.length > 0 && <ul>{invitations.map((invitation) => <li key={invitation.id}>
+          {invitation.title} <button disabled={busy || (!!activeStreamId && activeStreamId !== invitation.id)} onClick={() => void act(`/api/streams/${invitation.id}/join`, {})}>Accept invitation</button>
+        </li>)}</ul>}
+        {invitations.some(invitation => activeStreamId && invitation.id !== activeStreamId) &&
+          <p>End or leave your current stream before joining another.</p>}
+        {invitations.length === 0 && <p>No pending invitations</p>}
+      </>}
     </section>
   );
 }

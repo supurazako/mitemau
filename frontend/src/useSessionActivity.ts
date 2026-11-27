@@ -8,6 +8,7 @@ export type AccountSession = {
 }
 
 export function notifySessionChange() {
+  window.dispatchEvent(new Event('mitemau-session-change'))
   if (typeof BroadcastChannel === 'undefined') return
   const channel = new BroadcastChannel('mitemau-session')
   channel.postMessage('changed')

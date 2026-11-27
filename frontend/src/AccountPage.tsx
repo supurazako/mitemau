@@ -7,6 +7,7 @@ import AccountRecovery from "./AccountRecovery";
 import ReplaceRecoveryCodes, { RecoveryCodesDisplay } from "./RecoveryCodes";
 import StreamManager from "./StreamManager";
 import { useEffect, useState } from "react";
+import { useViewer } from "./lib/viewer";
 import { notifySessionChange, useSessionActivity } from "./useSessionActivity";
 import type { AccountSession } from "./useSessionActivity";
 
@@ -21,6 +22,7 @@ type Verification = {
 const headings = { "/account": "Account", "/broadcasting": "Broadcasting", "/broadcasting/invitations": "Broadcasting", "/sign-in": "Sign in", "/sign-up": "Create an account", "/recover-account": "Recover account" };
 
 function AccountPage({ page, invitee }: { page: keyof typeof headings; invitee?: string }) {
+  const viewer = useViewer();
   const invitationsPage = page === "/broadcasting/invitations";
   const broadcastingPage = page === "/broadcasting" || invitationsPage;
   const accountPage = page === "/account" || broadcastingPage;
@@ -372,7 +374,7 @@ function AccountPage({ page, invitee }: { page: keyof typeof headings; invitee?:
         <div className="broadcasting-layout" hidden={!broadcastingPage} key={account.email}>
           <nav className="broadcasting-sidebar" aria-label="Broadcasting navigation">
             <AppLink href="/broadcasting" aria-current={!invitationsPage ? "page" : undefined}>Studio</AppLink>
-            <AppLink href="/broadcasting/invitations" aria-current={invitationsPage ? "page" : undefined}>Invitations</AppLink>
+            {viewer.canBroadcast && <AppLink href="/broadcasting/invitations" aria-current={invitationsPage ? "page" : undefined}>Invitations</AppLink>}
           </nav>
           <div className="broadcasting-content">
             <div hidden={invitationsPage}><BroadcasterApplication /></div>

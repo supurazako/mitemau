@@ -119,8 +119,8 @@ export default function StreamManager({ invitationsPage, invitee }: { invitation
             <h3>{current.title}</h3>
             <p>{isCreator ? "You created this stream." : "You joined as a participant."}</p>
             {current.endReason && <p role="status">Stream ended by staff: {current.endReason}</p>}
-            {!suspended && isCreator && current.state === "ready" &&
-              <button className="primary-action" disabled={busy || !canPublish} onClick={() => void action("start")}>Start stream</button>}
+            {!suspended && canPublish && isCreator && current.state === "ready" &&
+              <button className="primary-action" disabled={busy} onClick={() => void action("start")}>Start stream</button>}
             {current.state !== "ended" && <div className="studio-exit">
               {isCreator
                 ? <button className="danger-action" disabled={busy} onClick={() => {
