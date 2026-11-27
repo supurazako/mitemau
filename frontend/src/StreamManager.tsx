@@ -20,6 +20,7 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
 export default function StreamManager({ invitationsPage, invitee }: { invitationsPage: boolean; invitee?: string }) {
   const [access, setAccess] = useState<{ status: string; reason?: string | null }>();
   const canPublish = access?.status === "approved";
+  const suspended = access?.status === "suspended";
   const [streams, setStreams] = useState<Stream[]>([]);
   const [draftTitle, setDraftTitle] = useState<string | null>(null);
   // The account stream list is ordered newest first.
@@ -94,17 +95,16 @@ export default function StreamManager({ invitationsPage, invitee }: { invitation
 
   return (
     <>
-    <section hidden={invitationsPage} className="stream-studio" aria-labelledby="stream-studio-heading">
-      <header className="page-heading">
+    <section hidden={invitationsPage || (suspended && !current && !error && !endNotice)} className="stream-studio"
+      aria-labelledby={suspended ? undefined : "stream-studio-heading"}>
+      {!suspended && <header className="page-heading">
         <h2 id="stream-studio-heading">Broadcast studio</h2>
-
-      </header>
-      {access?.status === "suspended" && <p role="status">Broadcasting suspended: {access.reason}</p>}
-      {access && !canPublish && access.status !== "suspended" &&
+      </header>}
+      {access && !canPublish && !suspended &&
         <p role="status">You need broadcaster approval to create a stream or send media.</p>}
       {endNotice && <p role="status">Stream ended by staff: {endNotice}</p>}
       {error && <p role="alert">{error}</p>}
-      {access && !current && <div className="studio-setup">
+      {access && !suspended && !current && <div className="studio-setup">
         <form className="studio-panel" onSubmit={(event) => { event.preventDefault(); void action("create"); }}>
           <h3>Your channel is offline</h3>
           <label>Stream title <input value={title} maxLength={200} required disabled={busy}
@@ -119,7 +119,7 @@ export default function StreamManager({ invitationsPage, invitee }: { invitation
             <h3>{current.title}</h3>
             <p>{isCreator ? "You created this stream." : "You joined as a participant."}</p>
             {current.endReason && <p role="status">Stream ended by staff: {current.endReason}</p>}
-            {isCreator && current.state === "ready" &&
+            {!suspended && isCreator && current.state === "ready" &&
               <button className="primary-action" disabled={busy || !canPublish} onClick={() => void action("start")}>Start stream</button>}
             {current.state !== "ended" && <div className="studio-exit">
               {isCreator
@@ -129,7 +129,7 @@ export default function StreamManager({ invitationsPage, invitee }: { invitation
                 : <button disabled={busy} onClick={() => void action("leave")}>Leave stream</button>}
             </div>}
           </header>
-          {current.state === "live" && <div className="watch-layout">
+          {!suspended && current.state === "live" && <div className="watch-layout">
             <div className="watch-media">
               {canPublish && <RelayConnection key={`publish-${current.id}`} streamID={current.id} />}
               <SharedStreamViewer key={`view-${current.id}`} streamID={current.id} ownAccountID={current.publisherId} />
