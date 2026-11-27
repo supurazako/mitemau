@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { AppLink } from "./AppLink";
 
 import type { LiveComment } from "./lib/comments";
 
@@ -15,6 +16,26 @@ export default function ReportUser({ targetId, streamId, streamTitle, relatedCom
     if (openRequest && dialog.current && !dialog.current.open) dialog.current.showModal();
   }, [openRequest]);
   const [reason, setReason] = useState("");
+  const [author, setAuthor] = useState<{ displayName?: string; displayId?: string }>();
+  const authorId = relatedComment?.accountId;
+  useEffect(() => {
+    if (!authorId) return;
+    const controller = new AbortController();
+    async function loadAuthor() {
+      try {
+        const response = await fetch(`/api/public/users/${authorId}`, {
+          credentials: "omit", signal: controller.signal,
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!controller.signal.aborted) setAuthor(data);
+      } catch {
+        // The comment preview remains usable if the profile lookup fails.
+      }
+    }
+    void loadAuthor();
+    return () => controller.abort();
+  }, [authorId]);
   const [incident, setIncident] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -36,7 +57,12 @@ export default function ReportUser({ targetId, streamId, streamTitle, relatedCom
       <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
         <p>Sign in to report this user. Reports are reviewed by staff.</p>
         {relatedComment && <figure className="report-comment-preview">
-          <figcaption>Related comment · <time dateTime={relatedComment.postedAt}>
+          <figcaption>
+            <AppLink href={author?.displayId ? `/users/${author.displayId}` : `/${relatedComment.accountId}`}>
+              {author?.displayName || (author?.displayId ? `@${author.displayId}` : "Comment author")}
+            </AppLink>
+            {author?.displayName && author.displayId && <> @{author.displayId}</>}
+            {" · "}<time dateTime={relatedComment.postedAt}>
             {new Date(relatedComment.postedAt).toLocaleString()}
           </time></figcaption>
           <blockquote>{relatedComment.body}</blockquote>
