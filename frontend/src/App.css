@@ -178,10 +178,10 @@ a { color: var(--accent); }
 .comment-feed li + li { margin-top: .75rem; border-top: 1px solid var(--border); padding-top: .75rem; }
 .comment-feed p { white-space: pre-wrap; margin-block: .25rem; }
 .comment-feed button { font-size: .8125rem; margin-inline-end: .25rem; }
-.live-comments form, .public-page .report-user form { display: grid; gap: .5rem; justify-items: start; }
-.public-page .report-user form { margin-top: .75rem; }
-.live-comments label, .public-page .report-user label { width: 100%; }
-.live-comments textarea, .public-page .report-user :is(textarea, input) {
+.live-comments form, .report-dialog form { display: grid; gap: .5rem; justify-items: start; }
+.report-dialog form { margin-top: .75rem; }
+.live-comments label, .report-dialog label { width: 100%; }
+.live-comments textarea, .report-dialog :is(textarea, input) {
   display: block;
   width: 100%;
   box-sizing: border-box;
@@ -192,7 +192,7 @@ a { color: var(--accent); }
   border: 1px solid var(--control-border);
   border-radius: .5rem;
 }
-.live-comments textarea, .public-page .report-user textarea { min-height: 4rem; resize: vertical; }
+.live-comments textarea, .report-dialog textarea { min-height: 4rem; resize: vertical; }
 
 @media (max-width: 52rem) {
   .watch-layout { grid-template-columns: minmax(0, 1fr); }
@@ -239,3 +239,16 @@ a { color: var(--accent); }
   .broadcasting-layout:not([hidden]) { grid-template-columns: minmax(0, 1fr); }
   .broadcasting-sidebar { flex-direction: row; flex-wrap: wrap; }
 }
+
+.report-dialog {
+  box-sizing: border-box;
+  width: min(32rem, calc(100% - 2rem));
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: .875rem;
+  color: var(--text-h);
+  background: var(--surface);
+}
+
+.report-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.report-dialog-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
