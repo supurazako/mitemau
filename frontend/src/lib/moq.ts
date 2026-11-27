@@ -26,6 +26,9 @@ export function connectRelay(
   onDisconnected: () => void,
   token?: string,
 ): RelaySession {
+  if (import.meta.env.DEV && import.meta.env.VITE_DISABLE_RELAY === "true") {
+    throw new Error("Media is unavailable in this test environment.");
+  }
   const setupOptions = token
     ? new SetupOptions().addAuthorizationToken(AuthorizationToken.newRegister(1, 0, new TextEncoder().encode(token)))
     : undefined;

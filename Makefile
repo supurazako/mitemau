@@ -1,13 +1,17 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help frontend backend migrate-up
+.PHONY: help frontend backend migrate-up test-environment
 
 help:
 	@printf '%-14s %s\n' \
 		'help' 'Show available commands' \
 		'frontend' 'Start the React frontend locally' \
 		'backend' 'Start the Go API locally' \
-		'migrate-up' 'Apply pending database migrations'
+		'migrate-up' 'Apply pending database migrations' \
+		'test-environment' 'Start the isolated browser test environment'
+
+test-environment:
+	python3 scripts/test-environment.py
 
 frontend:
 	cd frontend && npm run dev

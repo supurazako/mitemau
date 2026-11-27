@@ -57,8 +57,9 @@ func newPasskeyServer(v *verificationServer) (*passkeyServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	if origin.Hostname() != rpID || (origin.Scheme != "https" && !(origin.Scheme == "http" && rpID == "localhost")) {
-		return nil, errors.New("APP_ORIGIN must use HTTPS (or http://localhost) and match WEBAUTHN_RP_ID")
+	loopbackOrigin := rpID == "localhost" || rpID == "mitemau-test.localhost"
+	if origin.Hostname() != rpID || (origin.Scheme != "https" && !(origin.Scheme == "http" && loopbackOrigin)) {
+		return nil, errors.New("APP_ORIGIN must match WEBAUTHN_RP_ID and use HTTPS or a supported local HTTP origin")
 	}
 	wa, err := webauthn.New(&webauthn.Config{
 		RPID: rpID, RPDisplayName: "Mitemau", RPOrigins: []string{v.config.Origin},
