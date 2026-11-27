@@ -110,7 +110,7 @@ export default function RelayConnection({ streamID }: { streamID: string }) {
     <section className="studio-panel studio-sender" aria-label="Your broadcast">
       <h3>Your broadcast</h3>
       <section>
-
+        <h4>1. Connect</h4>
         <p role="status">{status}</p>
         <div className="studio-actions">
           <button
