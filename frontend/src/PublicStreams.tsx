@@ -106,7 +106,7 @@ function StreamPlayback({ stream, accountID, profileName }: { stream: PublicStre
       {!resource.unavailable && <span className="live-badge">Live</span>}
       <h1>{resource.data?.stream.title ?? stream.title}</h1>
       <p className="account-id">Watching from {profileName}’s page</p>
-      <ReportUser targetId={accountID} streamId={stream.id} />
+      <ReportUser targetId={accountID} streamId={stream.id} streamTitle={stream.title} />
     </header>
     {resource.loading && !resource.data && <p className="public-notice" role="status">Loading stream…</p>}
     <LoadError message={resource.error} reload={resource.reload} />

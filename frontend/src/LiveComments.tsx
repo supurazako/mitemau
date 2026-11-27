@@ -203,7 +203,7 @@ export default function LiveComments({ streamID }: { streamID: string }) {
       <ol>{snapshot?.comments.map((comment) => <li key={comment.id} data-comment-id={comment.id}>
         <AppLink href={`/${comment.accountId}`}>{comment.accountId.slice(0, 10)}</AppLink>{" "}<time dateTime={comment.postedAt}>{new Date(comment.postedAt).toLocaleTimeString()}</time>
         <p>{comment.body}</p>
-        <button type="button" onClick={() => openReport({ accountId: comment.accountId, commentId: comment.id, streamId: streamID })}>Report user</button>
+        <button type="button" aria-haspopup="dialog" onClick={() => openReport({ comment, streamId: streamID })}>Report comment</button>
         {canDelete && !ended && <button type="button" disabled={deleting !== null} onClick={() => void removeComment(comment.id)} aria-label={`Delete comment by ${comment.accountId.slice(0, 10)} at ${new Date(comment.postedAt).toLocaleTimeString()}`}>{deleting === comment.id ? "Deleting…" : "Delete"}</button>}
       </li>)}</ol>
     </div>
