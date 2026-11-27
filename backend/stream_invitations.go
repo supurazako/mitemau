@@ -10,10 +10,35 @@ import (
 func (s *broadcasterServer) invitationRoutes(mux *http.ServeMux) {
 	s.publisherRoutes(mux)
 	mux.HandleFunc("GET /account/invitations", s.invitations)
+	mux.HandleFunc("GET /account/invitations/eligibility/{account}", s.invitationEligibility)
 	mux.HandleFunc("POST /streams/{id}/invite", s.p.verification.protect(s.invite))
 	mux.HandleFunc("POST /streams/{id}/join", s.p.verification.protect(s.join))
 	mux.HandleFunc("POST /streams/{id}/leave", s.p.verification.protect(s.leave))
 }
+func (s *broadcasterServer) invitationEligibility(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	actor, ok := s.authenticate(w, r, false)
+	if !ok {
+		return
+	}
+	recipient, err := hex.DecodeString(r.PathValue("account"))
+	if err != nil || len(recipient) != 32 {
+		problem(w, 400, "Invalid account ID")
+		return
+	}
+	var eligible bool
+	err = s.p.verification.db.QueryRowContext(r.Context(), `SELECT COUNT(*)=2
+ FROM broadcaster_applications b
+ LEFT JOIN account_broadcast_permissions bp ON bp.account_id=b.account_id
+ WHERE b.account_id IN (?,?) AND b.approved_at IS NOT NULL
+ AND COALESCE(bp.broadcasting_allowed,TRUE)=TRUE`, actor, recipient).Scan(&eligible)
+	if err != nil {
+		problem(w, 503, "Could not check invitation eligibility")
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"eligible": eligible})
+}
+
 func (s *broadcasterServer) invitations(w http.ResponseWriter, r *http.Request) {
 	actor, ok := s.authenticate(w, r, false)
 	if !ok {

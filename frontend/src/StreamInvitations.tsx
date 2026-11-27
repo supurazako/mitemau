@@ -2,10 +2,11 @@ import { AppLink } from "./AppLink";
 import { useEffect, useRef, useState } from "react";
 
 type Invitation = { id: string; title: string };
-export default function StreamInvitations({ invitee, hostStream, activeStreamId, onChanged }: {
+export default function StreamInvitations({ invitee, hostStream, activeStreamId, canPublish, onChanged }: {
   invitee?: string;
   hostStream?: { id: string; title: string };
   activeStreamId?: string;
+  canPublish: boolean;
   onChanged: () => void;
 }) {
   const [displayID, setDisplayID] = useState("");
@@ -56,7 +57,7 @@ export default function StreamInvitations({ invitee, hostStream, activeStreamId,
       <h3>Collaboration invitations</h3>
       {notice && <p role="status">{notice}</p>}
       {error && <p role="alert">{error}</p>}
-      {invitee ? <InviteToStream invitee={invitee} hostStream={hostStream}
+      {canPublish && (invitee ? <InviteToStream invitee={invitee} hostStream={hostStream}
         busy={busy} onInvite={(stream, accountId) => void act(`/api/streams/${stream}/invite`, { accountId })} />
         : <form onSubmit={(event) => {
           event.preventDefault();
@@ -71,9 +72,9 @@ export default function StreamInvitations({ invitee, hostStream, activeStreamId,
           <label>Display ID <input required value={displayID} autoCapitalize="none" spellCheck={false}
             onChange={(event) => setDisplayID(event.target.value)} /></label>
           <button>Find user</button>
-        </form>}
+        </form>)}
       {invitations.length > 0 && <ul>{invitations.map((invitation) => <li key={invitation.id}>
-        {invitation.title} <button disabled={busy || (!!activeStreamId && activeStreamId !== invitation.id)} onClick={() => void act(`/api/streams/${invitation.id}/join`, {})}>Accept invitation</button>
+        {invitation.title} <button disabled={busy || !canPublish || (!!activeStreamId && activeStreamId !== invitation.id)} onClick={() => void act(`/api/streams/${invitation.id}/join`, {})}>Accept invitation</button>
       </li>)}</ul>}
       {invitations.some(invitation => activeStreamId && invitation.id !== activeStreamId) &&
         <p>End or leave your current stream before joining another.</p>}
@@ -87,7 +88,7 @@ function InviteToStream({ invitee, hostStream, busy, onInvite }: {
   invitee: string; hostStream?: { id: string; title: string };
   busy: boolean; onInvite: (stream: string, accountId: string) => void;
 }) {
-  const [profile, setProfile] = useState<{ accountId: string; displayId?: string; displayName?: string }>();
+  const [profile, setProfile] = useState<{ accountId: string; displayId?: string; displayName?: string; eligible: boolean }>();
   const [error, setError] = useState("");
   useEffect(() => {
     const controller = new AbortController();
@@ -96,7 +97,10 @@ function InviteToStream({ invitee, hostStream, busy, onInvite }: {
         const response = await fetch(invitee.startsWith("@") ? `/api/public/profiles/${invitee.slice(1)}` : `/api/public/users/${invitee}`, { signal: controller.signal });
         if (!response.ok) throw new Error(response.status === 404 ? "User not found." : "Could not look up user.");
         const data = await response.json();
-        if (!controller.signal.aborted) setProfile(data);
+        const eligibility = await fetch(`/api/account/invitations/eligibility/${data.accountId}`, { signal: controller.signal });
+        if (!eligibility.ok) throw new Error("Could not check whether this user can be invited.");
+        const { eligible } = await eligibility.json();
+        if (!controller.signal.aborted) setProfile({ ...data, eligible });
       } catch (cause) {
         if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause));
       }
@@ -109,7 +113,7 @@ function InviteToStream({ invitee, hostStream, busy, onInvite }: {
     <AppLink href="/broadcasting/invitations">Find another user</AppLink>
     {error && <p role="alert">{error}</p>}
     {profile && <p>Invite {profile.displayName || profile.displayId || "this user"}{profile.displayId && ` (@${profile.displayId})`}</p>}
-    {profile && (hostStream
+    {profile && (!profile.eligible ? <p>This user cannot receive a broadcast invitation.</p> : hostStream
       ? <button type="button" disabled={busy} onClick={() => onInvite(hostStream.id, profile.accountId)}>Invite to {hostStream.title}</button>
       : <p>Go live from your <AppLink href="/broadcasting">studio</AppLink> to invite this user.</p>)}
 

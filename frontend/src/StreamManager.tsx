@@ -140,7 +140,7 @@ export default function StreamManager({ invitationsPage, invitee }: { invitation
       )}
     </section>
     <div hidden={!invitationsPage}>
-      <StreamInvitations key={invitee ?? ""} invitee={invitee}
+      <StreamInvitations key={invitee ?? ""} invitee={invitee} canPublish={canPublish}
         hostStream={canPublish && isCreator && current?.state === "live" ? current : undefined}
         activeStreamId={current?.state === "live" ? current.id : undefined}
         onChanged={() => { generation.current++; }} />
