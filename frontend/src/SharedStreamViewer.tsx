@@ -34,11 +34,11 @@ export default function SharedStreamViewer({ streamID, ownAccountID }: {
   }, [streamID]);
 
   return (
-    <section>
+    <section className="studio-panel">
       <h3>Participants</h3>
       {error && <p role="alert">{error}</p>}
       {participants.map((participant) => (
-        <section key={participant.accountId}>
+        <section className="studio-participant" key={participant.accountId}>
           <p>{participant.accountId}{participant.accountId === ownAccountID ? " (you)" : ""}</p>
           {!participant.namespace && <p>{participant.publishingState === "disconnected" ? "Connection lost. Waiting for the participant to reconnect." : "Not publishing"}</p>}
           {participant.namespace && participant.accountId !== ownAccountID && (

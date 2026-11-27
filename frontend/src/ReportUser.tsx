@@ -17,8 +17,8 @@ export default function ReportUser({ targetId, streamId, relatedCommentId, initi
     } catch (cause) { setStatus(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   }
-  return <section aria-label="Report user">
-    <button type="button" onClick={() => setOpen(!open)}>Report user</button>
+  return <section className="report-user" aria-label="Report user">
+    <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>Report user</button>
     {open && <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <p>Sign in to report this user. Reports are reviewed by staff.</p>
       <label>What happened? <textarea required value={reason} onChange={(e) => setReason(e.target.value)} /></label>

@@ -31,6 +31,7 @@ func parseStaffIDs(value string) (map[string]bool, error) {
 
 func (s *broadcasterServer) routes(mux *http.ServeMux) {
 	s.streamRoutes(mux)
+	s.profileRoutes(mux)
 	s.moderationRoutes(mux)
 	s.reportRoutes(mux)
 	s.commentRestrictionRoutes(mux)

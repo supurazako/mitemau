@@ -107,24 +107,28 @@ export default function RelayConnection({ streamID }: { streamID: string }) {
   }
 
   return (
-    <>
+    <section className="studio-panel studio-sender" aria-label="Your broadcast">
+      <h3>Your broadcast</h3>
       <section>
-        <h2>Relay connection</h2>
+
         <p role="status">{status}</p>
-        <button
-          type="button"
-          disabled={status === "Connecting" || status === "Connected" || status === "Disconnecting"}
-          onClick={() => void connect()}
-        >
-          Connect
-        </button>
-        <button
-          type="button"
-          disabled={status !== "Connected"}
-          onClick={() => void disconnect()}
-        >
-          Disconnect
-        </button>
+        <div className="studio-actions">
+          <button
+            className="primary-action"
+            type="button"
+            disabled={status === "Connecting" || status === "Connected" || status === "Disconnecting"}
+            onClick={() => void connect()}
+          >
+            Connect
+          </button>
+          <button
+            type="button"
+            disabled={status !== "Connected"}
+            onClick={() => void disconnect()}
+          >
+            Disconnect my broadcast
+          </button>
+        </div>
       </section>
       <CameraPreview
         key={connectedRelay ? "connected" : "offline"}
@@ -134,6 +138,6 @@ export default function RelayConnection({ streamID }: { streamID: string }) {
           if (registrationRef.current === publishing?.registration) void disconnect();
         }}
       />
-    </>
+    </section>
   );
 }

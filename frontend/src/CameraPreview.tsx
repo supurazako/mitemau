@@ -200,25 +200,29 @@ export default function CameraPreview({ relay, publishing, onPublishingStopped }
 
   return (
     <section>
-      <h2>Camera preview</h2>
+      <h4>2. Camera &amp; microphone</h4>
+      <p>{relay ? "Start sending camera and microphone. You can add screen sharing once they’re live." : "You can preview your camera locally. Connect to send to viewers."}</p>
       <p role="status">{status}</p>
       {captureError && <p role="alert">{captureError}</p>}
-      {activePublication && <p>Publishing camera to {activePublication.namespace}</p>}
-      <video ref={videoRef} autoPlay muted playsInline />
-      <button
-        type="button"
-        disabled={status !== "Stopped"}
-        onClick={() => void start()}
-      >
-        Start camera
-      </button>
-      <button
-        type="button"
-        disabled={status !== "Running"}
-        onClick={() => void stop()}
-      >
-        Stop camera
-      </button>
+      {status === "Running" && activePublication && <p className="live-badge">Sending camera and microphone</p>}
+      <video ref={videoRef} aria-label="Local camera preview" autoPlay muted playsInline />
+      <div className="studio-actions">
+        <button
+          className={relay ? "primary-action" : undefined}
+          type="button"
+          disabled={status !== "Stopped"}
+          onClick={() => void start()}
+        >
+          {relay ? "Start camera and microphone" : "Preview camera"}
+        </button>
+        <button
+          type="button"
+          disabled={status !== "Running"}
+          onClick={() => void stop()}
+        >
+          {relay ? "Stop sending" : "Stop preview"}
+        </button>
+      </div>
       {status === "Running" && activePublication && (
         <ScreenShare namespace={activePublication.namespace} publication={activePublication.publication} />
       )}

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"net/http"
+	"strings"
 )
 
 type publicStream struct {
@@ -21,6 +22,7 @@ func (s *broadcasterServer) publicStreamRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /public/streams", s.publicStreams)
 	mux.HandleFunc("GET /public/streams/{id}", s.publicStream)
 	mux.HandleFunc("GET /public/users/{id}", s.publicUser)
+	mux.HandleFunc("GET /public/profiles/{id}", s.publicProfile)
 }
 
 func (s *broadcasterServer) publicStreams(w http.ResponseWriter, r *http.Request) {
@@ -113,22 +115,36 @@ func (s *broadcasterServer) publicStream(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *broadcasterServer) publicUser(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-store")
 	account, err := hex.DecodeString(r.PathValue("id"))
 	if err != nil || len(account) != 32 {
 		problem(w, 400, "Invalid account ID")
 		return
 	}
+	s.publicUserByKey(w, r, account, "")
+}
+
+func (s *broadcasterServer) publicProfile(w http.ResponseWriter, r *http.Request) {
+	displayID := strings.ToLower(r.PathValue("id"))
+	if !displayIDPattern.MatchString(displayID) {
+		problem(w, 400, "Invalid display ID")
+		return
+	}
+	s.publicUserByKey(w, r, nil, displayID)
+}
+
+func (s *broadcasterServer) publicUserByKey(w http.ResponseWriter, r *http.Request, account []byte, displayID string) {
+	w.Header().Set("Cache-Control", "no-store")
 	// Prefer the most recently joined live stream if older data has overlapping participation.
 	var raw, creator []byte
 	var title sql.NullString
 	var rawAccount []byte
-	err = s.p.verification.db.QueryRowContext(r.Context(), `SELECT a.id,s.id,s.creator_id,s.title
- FROM accounts a LEFT JOIN live_streams s ON s.id=(
+	var profile accountProfile
+	err := s.p.verification.db.QueryRowContext(r.Context(), `SELECT a.id,s.id,s.creator_id,s.title,COALESCE(profile.display_id,''),COALESCE(profile.display_name,'')
+ FROM accounts a LEFT JOIN account_profiles profile ON profile.account_id=a.id LEFT JOIN live_streams s ON s.id=(
   SELECT live.id FROM stream_participants p JOIN live_streams live ON live.id=p.stream_id
   WHERE p.account_id=a.id AND p.left_at IS NULL AND live.state='live'
   ORDER BY p.joined_at DESC,live.started_at DESC,live.id DESC LIMIT 1
- ) WHERE a.id=?`, account).Scan(&rawAccount, &raw, &creator, &title)
+ ) WHERE a.id=? OR profile.display_id=?`, account, displayID).Scan(&rawAccount, &raw, &creator, &title, &profile.DisplayID, &profile.DisplayName)
 	if err == sql.ErrNoRows {
 		problem(w, 404, "User not found")
 		return
@@ -141,5 +157,5 @@ func (s *broadcasterServer) publicUser(w http.ResponseWriter, r *http.Request) {
 	if raw != nil {
 		item = &publicStream{ID: hex.EncodeToString(raw), CreatorID: hex.EncodeToString(creator), Title: title.String}
 	}
-	writeJSON(w, 200, map[string]any{"accountId": hex.EncodeToString(rawAccount), "stream": item})
+	writeJSON(w, 200, map[string]any{"accountId": hex.EncodeToString(rawAccount), "stream": item, "displayId": profile.DisplayID, "displayName": profile.DisplayName})
 }

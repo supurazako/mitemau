@@ -18,7 +18,7 @@ export default function LiveComments({ streamID }: { streamID: string }) {
   const [status, setStatus] = useState("Connecting comments");
   const [ended, setEnded] = useState(false);
   const [body, setBody] = useState("");
-  const [suspension, setSuspension] = useState<string | null>(null);
+  const [permission, setPermission] = useState<"loading" | "signed-out" | { suspension: string | null }>("loading");
   const [posting, setPosting] = useState(false);
   const [postStatus, setPostStatus] = useState("");
   const [canDelete, setCanDelete] = useState(false);
@@ -31,6 +31,7 @@ export default function LiveComments({ streamID }: { streamID: string }) {
   const pinned = useRef(true);
   const postRequest = useRef<AbortController | null>(null);
   const characters = Array.from(body.trim()).length;
+  const suspension = typeof permission === "object" ? permission.suspension : null;
 
   useEffect(() => {
     const lifetime = new AbortController();
@@ -145,10 +146,10 @@ export default function LiveComments({ streamID }: { streamID: string }) {
       loading = true;
       try {
         const response = await fetch("/api/account/comment-permission", { signal: controller.signal, cache: "no-store" });
-        if (response.status === 401) { if (!controller.signal.aborted) setSuspension(null); return; }
+        if (response.status === 401) { if (!controller.signal.aborted) setPermission("signed-out"); return; }
         if (!response.ok) return;
         const data = await response.json();
-        if (!controller.signal.aborted) setSuspension(data.postingAllowed ? null : data.reason || "Comment posting is suspended");
+        if (!controller.signal.aborted) setPermission({ suspension: data.postingAllowed ? null : data.reason || "Comment posting is suspended" });
       } catch { /* The posting API remains authoritative during connection loss. */ }
       finally { loading = false; }
     }
@@ -195,9 +196,10 @@ export default function LiveComments({ streamID }: { streamID: string }) {
   }
 
   return <section className="live-comments" aria-label="Live comments">
-    <h3>Live comments</h3>
-    <p role="status">{status}</p>
-    <div className="comment-feed" ref={view} onScroll={() => { const element = view.current; if (element) pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < 24; }}>
+    <h2>Live chat</h2>
+    <p className="chat-status" role="status">{status}</p>
+    <div className="comment-feed" role="region" aria-label="Recent comments" tabIndex={0} ref={view} onScroll={() => { const element = view.current; if (element) pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < 24; }}>
+      {!ended && snapshot?.comments.length === 0 && <p>No comments yet.</p>}
       <ol>{snapshot?.comments.map((comment) => <li key={comment.id} data-comment-id={comment.id}>
         <AppLink href={`/${comment.accountId}`}>{comment.accountId.slice(0, 10)}</AppLink>{" "}<time dateTime={comment.postedAt}>{new Date(comment.postedAt).toLocaleTimeString()}</time>
         <p>{comment.body}</p>
@@ -206,11 +208,11 @@ export default function LiveComments({ streamID }: { streamID: string }) {
       </li>)}</ol>
     </div>
     {suspension !== null && <p role="status">Posting suspended: {suspension}</p>}
-    {!ended && <form onSubmit={(event) => { event.preventDefault(); void post(); }}>
+    {!ended && permission === "signed-out" && <p><AppLink href="/sign-in">Sign in to post</AppLink></p>}
+    {!ended && permission !== "signed-out" && <form onSubmit={(event) => { event.preventDefault(); void post(); }}>
       <label>Comment <textarea value={body} disabled={posting || suspension !== null} onChange={(event) => { setBody(event.target.value); pending.current = null; }} required /></label>
       <p>{characters} / 500 · Latest 50 comments · One post per two seconds across all streams</p>
-      <button disabled={posting || suspension !== null || characters === 0 || characters > 500}>Post comment</button>
-      <p>Posting requires sign-in. <AppLink href="/account">Account &amp; sign-in</AppLink></p>
+      <button className="primary-action" disabled={posting || suspension !== null || characters === 0 || characters > 500}>Post comment</button>
     </form>}
     {deleteStatus && <p role="status">{deleteStatus}</p>}
     {postStatus && <p role="status">{postStatus}</p>}

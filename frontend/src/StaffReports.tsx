@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 type Report = { id: string; reporterId: string; targetId: string; reason: string; incidentAt: string; streamId: string | null; commentId: string | null; state: string; outcome: string | null; expiresAt: string };
 export default function StaffReports() {
  const evidenceRequest=useRef(0); const [commentId,setCommentId]=useState(""); const [offset,setOffset]=useState(0); const [evidence,setEvidence]=useState<{kind:string;body:string | null;occurredAt:string}[]>([]); const [items,setItems]=useState<Report[]>([]); const [selected,setSelected]=useState<string | null>(null); const [outcome,setOutcome]=useState(""); const [status,setStatus]=useState(""); const [busy,setBusy]=useState(false);
+ const [listLoaded, setListLoaded] = useState(false);
  const listGeneration = useRef(0);
  const requestedPage = useRef(0);
  const committedPage = useRef(0);
@@ -17,7 +18,7 @@ export default function StaffReports() {
      if (!response.ok) throw new Error("Could not load reports");
      const data = await response.json() as Report[];
      if (signal?.aborted || generation !== listGeneration.current) return false;
-     setItems(data); setOffset(page); committedPage.current = page;
+     setItems(data); setOffset(page); setListLoaded(true); committedPage.current = page;
      return true;
    } catch (cause) {
      if (!signal?.aborted && generation === listGeneration.current) {
@@ -36,7 +37,9 @@ export default function StaffReports() {
  }, []);
  async function action(id:string,operation:string) {if(busy)return;setBusy(true);setStatus("");try{const r=await fetch(`/api/staff/reports/${id}/${operation}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(operation === "delete-comment" ? {commentId: commentId.trim()} : {outcome})});if(!r.ok)throw new Error((await r.json()).error || "Action failed");if (await load()) setStatus(operation==="resolve"?"Report resolved":"Comment removed");}catch(e){setStatus(String(e))}finally{setBusy(false)}}
  const report=items.find(item=>item.id===selected);
- return <section aria-label="User reports"><h3>User reports</h3><button disabled={busy} onClick={()=>void load().catch(e=>setStatus(String(e)))}>Refresh reports</button><p>Page {Math.floor(offset / 100) + 1}</p><button disabled={busy || offset === 0} onClick={()=>{const page=Math.max(0,requestedPage.current-100);void load(undefined,page).catch(e=>setStatus(String(e)))}}>Previous</button><button disabled={busy || items.length < 100} onClick={()=>{const page=requestedPage.current+100;void load(undefined,page).catch(e=>setStatus(String(e)))}}>Next</button><ul>{items.map(item=><li key={item.id}><button onClick={()=>{setSelected(item.id);setOutcome("");setCommentId(item.commentId || "");setEvidence([]);const generation=++evidenceRequest.current;void fetch(`/api/staff/reports/${item.id}/evidence`,{signal:AbortSignal.timeout(10000)}).then(r=>{if(!r.ok)throw new Error("Could not load evidence");return r.json()}).then(data=>{if(generation===evidenceRequest.current)setEvidence(data)}).catch(e=>{if(generation===evidenceRequest.current)setStatus(String(e))})}}>{item.state} — {item.targetId.slice(0,12)} — {new Date(item.incidentAt).toLocaleString()}</button></li>)}</ul>
+ return <section aria-label="User reports"><h3>User reports</h3><button disabled={busy} onClick={()=>void load().catch(e=>setStatus(String(e)))}>Refresh reports</button>
+ {listLoaded && items.length === 0 && <p>{offset === 0 ? "No reports" : "No reports on this page"}</p>}
+ {(offset > 0 || items.length >= 100) && <> <p>Page {Math.floor(offset / 100) + 1}</p><button disabled={busy || offset === 0} onClick={()=>{const page=Math.max(0,requestedPage.current-100);void load(undefined,page).catch(e=>setStatus(String(e)))}}>Previous</button><button disabled={busy || items.length < 100} onClick={()=>{const page=requestedPage.current+100;void load(undefined,page).catch(e=>setStatus(String(e)))}}>Next</button></>}<ul>{items.map(item=><li key={item.id}><button onClick={()=>{setSelected(item.id);setOutcome("");setCommentId(item.commentId || "");setEvidence([]);const generation=++evidenceRequest.current;void fetch(`/api/staff/reports/${item.id}/evidence`,{signal:AbortSignal.timeout(10000)}).then(r=>{if(!r.ok)throw new Error("Could not load evidence");return r.json()}).then(data=>{if(generation===evidenceRequest.current)setEvidence(data)}).catch(e=>{if(generation===evidenceRequest.current)setStatus(String(e))})}}>{item.state} — {item.targetId.slice(0,12)} — {new Date(item.incidentAt).toLocaleString()}</button></li>)}</ul>
  {report && <article><h4>Report {report.id}</h4><p>Target: {report.targetId}</p><p>Reporter: {report.reporterId}</p><p>Incident: {new Date(report.incidentAt).toLocaleString()}</p><p style={{whiteSpace:"pre-wrap"}}>{report.reason}</p><p>Stream: {report.streamId || "none"}</p><p>Comment: {report.commentId || "none"}</p><p>Expires: {new Date(report.expiresAt).toLocaleString()}</p>{report.outcome && <p>Outcome: {report.outcome}</p>}
  <CommentPermissionControl key={report.id} accountId={report.targetId} reportId={report.id} />
  <BroadcastPermissionControl key={`broadcast-${report.id}`} accountId={report.targetId} reportId={report.id} />

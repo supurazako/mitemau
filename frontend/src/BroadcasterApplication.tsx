@@ -76,10 +76,15 @@ export default function BroadcasterApplication() {
     }
   }
 
+  const showPermission = access?.status !== "approved";
+  if (!showPermission && !access?.staff && !error) return null;
+
   return (
     <section>
-      <h2>Broadcasting permission</h2>
-      <button disabled={busy} onClick={() => void perform()}>Refresh status</button>
+      {showPermission && <>
+        <h2>Broadcasting permission</h2>
+        <button disabled={busy} onClick={() => void perform()}>Refresh status</button>
+      </>}
       {error && <p role="alert">{error}</p>}
       {access?.status === "not_applied" && (
         <button disabled={busy} onClick={() => void perform("/api/account/broadcaster")}>
@@ -88,7 +93,6 @@ export default function BroadcasterApplication() {
       )}
       {access?.status === "pending" && <p role="status">Application pending approval</p>}
       {access?.status === "suspended" && <p role="status">Broadcasting suspended: {access.reason}</p>}
-      {access?.status === "approved" && <p role="status">Broadcasting permission granted</p>}
       {access?.staff && (
         <section>
           <h3>Pending applications</h3>

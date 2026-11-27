@@ -91,7 +91,7 @@ export default function ScreenViewer({ relay, namespace, timeline }: {
     <section aria-label="Shared screen">
       <h3>Shared screen</h3>
       <p role="status">{status}</p>
-      <button type="button" disabled={status === "Connecting to screen" || status === "Waiting for screen keyframe" || status === "Screen playing"}
+      <button className="primary-action" type="button" disabled={status === "Connecting to screen" || status === "Waiting for screen keyframe" || status === "Screen playing"}
         onClick={() => void watch()}>Watch shared screen</button>
       <canvas ref={canvasRef} aria-label="Remote shared screen" />
     </section>

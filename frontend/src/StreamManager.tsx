@@ -6,6 +6,8 @@ import RelayConnection from "./RelayConnection";
 
 type Stream = { id: string; creatorId: string; publisherId: string; title: string; state: "ready" | "live" | "ended"; endReason?: string };
 
+const stateLabel: Record<Stream["state"], string> = { ready: "Ready to start", live: "Live", ended: "Ended" };
+
 async function request<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, body === undefined ? {} : {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -15,7 +17,7 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
   return result;
 }
 
-export default function StreamManager() {
+export default function StreamManager({ invitationsPage, invitee }: { invitationsPage: boolean; invitee?: string }) {
   const [access, setAccess] = useState<{ status: string; reason?: string | null }>();
   const canPublish = access?.status === "approved";
   const [streams, setStreams] = useState<Stream[]>([]);
@@ -27,6 +29,7 @@ export default function StreamManager() {
   const working = useRef(false);
   const generation = useRef(0);
   const selected = streams.find((stream) => stream.id === selectedID);
+  const isCreator = selected && selected.creatorId === selected.publisherId;
 
   useEffect(() => {
     let active = true;
@@ -84,38 +87,64 @@ export default function StreamManager() {
   }
 
   return (
-    <section>
-      <h2>Your streams</h2>
+    <>
+    <section hidden={invitationsPage} className="stream-studio" aria-labelledby="stream-studio-heading">
+      <header className="page-heading">
+        <h2 id="stream-studio-heading">Broadcast studio</h2>
+
+      </header>
       {access?.status === "suspended" && <p role="status">Broadcasting suspended: {access.reason}</p>}
+      {access && !canPublish && access.status !== "suspended" &&
+        <p role="status">You need broadcaster approval to create a stream or send media.</p>}
       {selectedID && !selected && <p role="status">This stream has ended or your participation has ended.</p>}
       {error && <p role="alert">{error}</p>}
-      <form onSubmit={(event) => { event.preventDefault(); void action("create"); }}>
-        <label>Stream title <input value={title} maxLength={200} required disabled={busy}
-          onChange={(event) => { pending.current = null; setTitle(event.target.value); }} /></label>
-        <button disabled={busy || !canPublish || !title.trim()}>Create stream</button>
-      </form>
-      <label>Stream <select value={selectedID} disabled={busy} onChange={(event) => setSelectedID(event.target.value)}>
-        <option value="">Select a stream</option>
-        {streams.map((stream) => <option key={stream.id} value={stream.id}>{stream.title} ({stream.state})</option>)}
-      </select></label>
-      <StreamInvitations streamID={canPublish && selected?.creatorId === selected?.publisherId && selected?.state !== "ended" ? selected?.id : undefined}
-        onChanged={() => { generation.current++; }} />
+      <div className="studio-setup">
+        <form className="studio-panel" onSubmit={(event) => { event.preventDefault(); void action("create"); }}>
+          <h3>Create a stream</h3>
+          <label>Stream title <input value={title} maxLength={200} required disabled={busy}
+            onChange={(event) => { pending.current = null; setTitle(event.target.value); }} /></label>
+          <button className="primary-action" disabled={busy || !canPublish || !title.trim()}>Create stream</button>
+        </form>
+        <div className="studio-panel">
+          <h3>Open a stream</h3>
+          <label>Your streams <select value={selectedID} disabled={busy} onChange={(event) => setSelectedID(event.target.value)}>
+            <option value="">Select a stream</option>
+            {streams.map((stream) => <option key={stream.id} value={stream.id}>{stream.title} ({stateLabel[stream.state]})</option>)}
+          </select></label>
+        </div>
+      </div>
       {selected && (
-        <section>
-          <h3>{selected.title}</h3>
-          <p role="status">{selected.state}</p>
-          {selected.endReason && <p role="status">Stream ended by staff: {selected.endReason}</p>}
-          <button disabled={busy || !canPublish || selected.state !== "ready" || selected.creatorId !== selected.publisherId} onClick={() => void action("start")}>Start stream</button>
-          <button disabled={busy || selected.state === "ended" || selected.creatorId !== selected.publisherId} onClick={() => void action("end")}>End stream for everyone</button>
-          {selected.creatorId !== selected.publisherId && selected.state !== "ended" && (
-            <button disabled={busy} onClick={() => void action("leave")}>Leave stream</button>
-          )}
-          {selected.state === "live" && canPublish && <RelayConnection key={`publish-${selected.id}`}
-            streamID={selected.id} />}
-          {selected.state === "live" && <LiveComments key={`comments-${selected.id}`} streamID={selected.id} />}
-          {selected.state === "live" && <SharedStreamViewer key={`view-${selected.id}`} streamID={selected.id} ownAccountID={selected.publisherId} />}
+        <section className="studio-current">
+          <header className="studio-panel">
+            <p className={selected.state === "live" ? "live-badge" : "studio-state"} role="status">{stateLabel[selected.state]}</p>
+            <h3>{selected.title}</h3>
+            <p>{isCreator ? "You created this stream." : "You joined as a participant."}</p>
+            {selected.endReason && <p role="status">Stream ended by staff: {selected.endReason}</p>}
+            {isCreator && selected.state === "ready" &&
+              <button className="primary-action" disabled={busy || !canPublish} onClick={() => void action("start")}>Start stream</button>}
+            {selected.state !== "ended" && <div className="studio-exit">
+              {isCreator
+                ? <button className="danger-action" disabled={busy} onClick={() => {
+                  if (window.confirm("End this stream for everyone? This stream cannot be restarted.")) void action("end");
+                }}>End stream for everyone</button>
+                : <button disabled={busy} onClick={() => void action("leave")}>Leave stream</button>}
+            </div>}
+          </header>
+          {selected.state === "live" && <div className="watch-layout">
+            <div className="watch-media">
+              {canPublish && <RelayConnection key={`publish-${selected.id}`} streamID={selected.id} />}
+              <SharedStreamViewer key={`view-${selected.id}`} streamID={selected.id} ownAccountID={selected.publisherId} />
+            </div>
+            <LiveComments key={`comments-${selected.id}`} streamID={selected.id} />
+          </div>}
         </section>
       )}
     </section>
+    <div hidden={!invitationsPage}>
+      <StreamInvitations key={invitee ?? ""} invitee={invitee}
+        streams={canPublish ? streams.filter(stream => stream.creatorId === stream.publisherId && stream.state !== "ended") : []}
+        onChanged={() => { generation.current++; }} />
+    </div>
+    </>
   );
 }

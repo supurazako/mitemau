@@ -138,7 +138,7 @@ export default function CameraViewer({ initialNamespace = "" }: { initialNamespa
 
   return (
     <section>
-      {!initialNamespace && <h2>Watch camera</h2>}
+      {initialNamespace ? <h3>Camera</h3> : <h2>Watch camera</h2>}
       <form onSubmit={(event) => {
         event.preventDefault();
         void watch();
@@ -148,7 +148,7 @@ export default function CameraViewer({ initialNamespace = "" }: { initialNamespa
           <input value={namespace} onChange={(event) => setNamespace(event.target.value)}
             disabled={watching} required />
         </label>}
-        <button disabled={watching}>Watch</button>
+        <button className="primary-action" disabled={watching}>Watch camera</button>
         <button type="button" disabled={!watching} onClick={() => {
           stopRef.current?.();
           setScreenSession(null);

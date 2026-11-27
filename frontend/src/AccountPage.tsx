@@ -1,10 +1,11 @@
+import AccountProfile from "./AccountProfile";
+import { AppLink } from "./AppLink";
 import "./App.css";
 import BroadcasterApplication from "./BroadcasterApplication";
 import BackupPasskey from "./BackupPasskey";
 import AccountRecovery from "./AccountRecovery";
 import ReplaceRecoveryCodes, { RecoveryCodesDisplay } from "./RecoveryCodes";
 import StreamManager from "./StreamManager";
-import CameraViewer from "./CameraViewer";
 import { useEffect, useState } from "react";
 import { notifySessionChange, useSessionActivity } from "./useSessionActivity";
 import type { AccountSession } from "./useSessionActivity";
@@ -17,7 +18,12 @@ type Verification = {
   retryAfterSeconds?: number;
 };
 
-function AccountPage() {
+const headings = { "/account": "Account", "/broadcasting": "Broadcasting", "/broadcasting/invitations": "Broadcasting", "/sign-in": "Sign in", "/sign-up": "Create an account", "/recover-account": "Recover account" };
+
+function AccountPage({ page, invitee }: { page: keyof typeof headings; invitee?: string }) {
+  const invitationsPage = page === "/broadcasting/invitations";
+  const broadcastingPage = page === "/broadcasting" || invitationsPage;
+  const accountPage = page === "/account" || broadcastingPage;
   const [account, setAccount] = useState<AccountSession>({ signedIn: false });
   const [issuedCodes, setIssuedCodes] = useState<{
     email: string;
@@ -26,6 +32,8 @@ function AccountPage() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [verification, setVerification] = useState<Verification | null>(null);
+  const [registrationReady, setRegistrationReady] = useState(false);
+  const [sessionKnown, setSessionKnown] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -44,22 +52,9 @@ function AccountPage() {
             "Could not restore your session. Reload to try again.",
           );
         const restoredSession: AccountSession = await sessionResponse.json();
-        if (restoredSession.signedIn) {
-          if (!controller.signal.aborted) setAccount(restoredSession);
-          return;
-        }
-        const response = await fetch("/api/registration/email", {
-          signal: controller.signal,
-        });
-        if (!response.ok)
-          throw new Error(
-            "Could not restore registration. Reload to try again.",
-          );
-        const data: Verification = await response.json();
         if (!controller.signal.aborted) {
-          setVerification(data);
-          setEmail(data.email ?? "");
-          setRetryUntil(Date.now() + (data.retryAfterSeconds ?? 0) * 1000);
+          setAccount(restoredSession);
+          setSessionKnown(true);
         }
       } catch (err) {
         if (!controller.signal.aborted)
@@ -76,6 +71,30 @@ function AccountPage() {
     return () => controller.abort();
   }, []);
 
+  const signUpPage = page === "/sign-up";
+  const hasSession = account.signedIn;
+  useEffect(() => {
+    if (!signUpPage || !sessionKnown || hasSession || registrationReady) return;
+    const controller = new AbortController();
+    async function restoreVerification() {
+      try {
+        const response = await fetch("/api/registration/email", { signal: controller.signal });
+        if (!response.ok) throw new Error("Could not restore registration. Reload to try again.");
+        const data: Verification = await response.json();
+        if (controller.signal.aborted) return;
+        setVerification(data);
+        setEmail(data.email ?? "");
+        setRetryUntil(Date.now() + (data.retryAfterSeconds ?? 0) * 1000);
+      } catch (cause) {
+        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        if (!controller.signal.aborted) setRegistrationReady(true);
+      }
+    }
+    void restoreVerification();
+    return () => controller.abort();
+  }, [signUpPage, sessionKnown, hasSession, registrationReady]);
+
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
@@ -90,7 +109,10 @@ function AccountPage() {
         });
         if (!response.ok) return;
         const result: AccountSession = await response.json();
-        if (!controller.signal.aborted) setAccount(result);
+        if (!controller.signal.aborted) {
+          setSessionKnown(true);
+          setAccount(result);
+        }
       } catch {
         /* Keep the last known display when offline; the server checks authorization. */
       }
@@ -120,6 +142,21 @@ function AccountPage() {
   );
   const signedIn = account.signedIn && !sessionExpired;
   useSessionActivity(account, signedIn, setAccount);
+
+  const next = new URLSearchParams(window.location.search).get("next") ?? "";
+  const returnPath = /^\/broadcasting(?:\/invitations(?:\/(?:[a-f0-9]{64}|@[a-z0-9][a-z0-9_-]{2,23}))?)?$/i.test(next)
+    ? next : next === "broadcasting" ? "/broadcasting" : "/account";
+  const protectedPath = invitee ? `/broadcasting/invitations/${invitee}` : page;
+  const redirectTo = sessionKnown && signedIn !== accountPage
+    ? signedIn ? returnPath : broadcastingPage ? `/sign-in?next=${encodeURIComponent(protectedPath)}` : "/sign-in"
+    : null;
+  useEffect(() => {
+    if (!redirectTo) return;
+    window.history.replaceState(null, "", redirectTo);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    window.scrollTo(0, 0);
+  }, [redirectTo]);
+
 
   const remaining = Math.max(0, Math.ceil((retryUntil - now) / 1000));
   const expired = Boolean(
@@ -325,26 +362,33 @@ function AccountPage() {
   }
 
   return (
-    <main className="registration">
-      {signedIn && <BroadcasterApplication key={`broadcaster-${account.email}`} />}
-      {signedIn && <StreamManager key={`streams-${account.email}`} />}
-      <CameraViewer />
-      <h1>Mitemau</h1>
-      {loading ? (
+    <main className={`registration${broadcastingPage && signedIn ? " account-studio" : ""}`}>
+      <header className="page-heading">
+        <h1>{headings[page]}</h1>
+        {error && !(page === "/account" && signedIn) && <p role="alert">{error}</p>}
+      </header>
+      {accountPage && signedIn && (
+        // Keep the sending session mounted when switching between settings pages.
+        <div className="broadcasting-layout" hidden={!broadcastingPage} key={account.email}>
+          <nav className="broadcasting-sidebar" aria-label="Broadcasting navigation">
+            <AppLink href="/broadcasting" aria-current={!invitationsPage ? "page" : undefined}>Studio</AppLink>
+            <AppLink href="/broadcasting/invitations" aria-current={invitationsPage ? "page" : undefined}>Invitations</AppLink>
+          </nav>
+          <div className="broadcasting-content">
+            <div hidden={invitationsPage}><BroadcasterApplication /></div>
+            <StreamManager invitationsPage={invitationsPage} invitee={invitee} />
+          </div>
+        </div>
+      )}
+      {loading || redirectTo ? (
         <p role="status">Loading…</p>
       ) : (
         <>
           {signedIn ? (
-            <section aria-label="Signed-in account">
+            <section hidden={broadcastingPage} className="account-details" aria-label="Signed-in account">
               <h2>Signed in</h2>
               <p>You are signed in as {account.email}.</p>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void signOut()}
-              >
-                Sign out
-              </button>
+              {!broadcastingPage && <AccountProfile key={account.email} />}
               <RecoveryCodesDisplay
                 codes={
                   issuedCodes && issuedCodes.email === account.email
@@ -362,11 +406,16 @@ function AccountPage() {
                 }
               />
               <BackupPasskey key={account.email} busy={busy} onBusy={setBusy} />
+              <footer className="account-sign-out">
+                <button type="button" disabled={busy} onClick={() => void signOut()}>
+                  Sign out
+                </button>
+                {error && <p role="alert">{error}</p>}
+              </footer>
             </section>
-          ) : (
+          ) : page === "/sign-in" ? (
             <>
               <section aria-label="Sign in">
-                <h2>Sign in</h2>
                 {sessionExpired && (
                   <p role="status">
                     Your session expired. Please sign in again.
@@ -380,6 +429,13 @@ function AccountPage() {
                   Sign in with a Passkey
                 </button>
               </section>
+              <nav className="auth-links" aria-label="Other account options">
+                <AppLink href="/sign-up">Create an account</AppLink>
+                <AppLink href="/recover-account">Recover account</AppLink>
+              </nav>
+            </>
+          ) : page === "/recover-account" ? (
+            <>
               <AccountRecovery
                 busy={busy}
                 onBusy={setBusy}
@@ -392,8 +448,11 @@ function AccountPage() {
                   notifySessionChange();
                 }}
               />
-              <h2>Create an account</h2>
-              {verified ? (
+              <AppLink href="/sign-in">Back to sign in</AppLink>
+            </>
+          ) : signUpPage ? (
+            <>
+              {!registrationReady && sessionKnown ? <p role="status">Loading registration…</p> : verified ? (
                 <section aria-label="Email verification complete">
                   <h2>Email verified</h2>
                   <p>{verification?.email}</p>
@@ -495,10 +554,10 @@ function AccountPage() {
                   )}
                 </>
               )}
+              <AppLink href="/sign-in">Back to sign in</AppLink>
             </>
-          )}
+          ) : null}
           {busy && <p role="status">Please wait…</p>}
-          {error && <p role="alert">{error}</p>}
         </>
       )}
     </main>
