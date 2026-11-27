@@ -2,13 +2,13 @@ import { AppLink } from "./AppLink";
 import { useEffect, useRef, useState } from "react";
 
 type Invitation = { id: string; title: string };
-export default function StreamInvitations({ invitee, streams, onChanged }: {
+export default function StreamInvitations({ invitee, hostStream, activeStreamId, onChanged }: {
   invitee?: string;
-  streams: { id: string; title: string }[];
+  hostStream?: { id: string; title: string };
+  activeStreamId?: string;
   onChanged: () => void;
 }) {
   const [displayID, setDisplayID] = useState("");
-  const [target, setTarget] = useState("");
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -56,7 +56,7 @@ export default function StreamInvitations({ invitee, streams, onChanged }: {
       <h3>Collaboration invitations</h3>
       {notice && <p role="status">{notice}</p>}
       {error && <p role="alert">{error}</p>}
-      {invitee ? <InviteToStream invitee={invitee} streams={streams} target={target} setTarget={setTarget}
+      {invitee ? <InviteToStream invitee={invitee} hostStream={hostStream}
         busy={busy} onInvite={(stream, accountId) => void act(`/api/streams/${stream}/invite`, { accountId })} />
         : <form onSubmit={(event) => {
           event.preventDefault();
@@ -73,17 +73,19 @@ export default function StreamInvitations({ invitee, streams, onChanged }: {
           <button>Find user</button>
         </form>}
       {invitations.length > 0 && <ul>{invitations.map((invitation) => <li key={invitation.id}>
-        {invitation.title} <button disabled={busy} onClick={() => void act(`/api/streams/${invitation.id}/join`, {})}>Accept invitation</button>
+        {invitation.title} <button disabled={busy || (!!activeStreamId && activeStreamId !== invitation.id)} onClick={() => void act(`/api/streams/${invitation.id}/join`, {})}>Accept invitation</button>
       </li>)}</ul>}
+      {invitations.some(invitation => activeStreamId && invitation.id !== activeStreamId) &&
+        <p>End or leave your current stream before joining another.</p>}
       {invitations.length === 0 && <p>No pending invitations</p>}
     </section>
   );
 }
 
 
-function InviteToStream({ invitee, streams, target, setTarget, busy, onInvite }: {
-  invitee: string; streams: { id: string; title: string }[]; target: string;
-  setTarget: (value: string) => void; busy: boolean; onInvite: (stream: string, accountId: string) => void;
+function InviteToStream({ invitee, hostStream, busy, onInvite }: {
+  invitee: string; hostStream?: { id: string; title: string };
+  busy: boolean; onInvite: (stream: string, accountId: string) => void;
 }) {
   const [profile, setProfile] = useState<{ accountId: string; displayId?: string; displayName?: string }>();
   const [error, setError] = useState("");
@@ -107,15 +109,9 @@ function InviteToStream({ invitee, streams, target, setTarget, busy, onInvite }:
     <AppLink href="/broadcasting/invitations">Find another user</AppLink>
     {error && <p role="alert">{error}</p>}
     {profile && <p>Invite {profile.displayName || profile.displayId || "this user"}{profile.displayId && ` (@${profile.displayId})`}</p>}
-    {profile && (streams.length > 0 ? <form onSubmit={(event) => {
-      event.preventDefault();
-      if (streams.some((stream) => stream.id === target)) onInvite(target, profile.accountId);
-    }}>
-      <label>Stream <select value={target} required disabled={busy} onChange={(event) => setTarget(event.target.value)}>
-        <option value="">Select one of your streams</option>
-        {streams.map((stream) => <option key={stream.id} value={stream.id}>{stream.title}</option>)}
-      </select></label>
-      <button disabled={busy || !target}>Send invitation</button>
-    </form> : <p>Open the <AppLink href="/broadcasting">studio</AppLink> to create a stream you can invite this user to.</p>)}
+    {profile && (hostStream
+      ? <button type="button" disabled={busy} onClick={() => onInvite(hostStream.id, profile.accountId)}>Invite to {hostStream.title}</button>
+      : <p>Go live from your <AppLink href="/broadcasting">studio</AppLink> to invite this user.</p>)}
+
   </>;
 }

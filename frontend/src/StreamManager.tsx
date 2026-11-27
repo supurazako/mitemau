@@ -21,15 +21,21 @@ export default function StreamManager({ invitationsPage, invitee }: { invitation
   const [access, setAccess] = useState<{ status: string; reason?: string | null }>();
   const canPublish = access?.status === "approved";
   const [streams, setStreams] = useState<Stream[]>([]);
-  const [selectedID, setSelectedID] = useState("");
-  const [title, setTitle] = useState("");
+  const [draftTitle, setDraftTitle] = useState<string | null>(null);
+  // The account stream list is ordered newest first.
+  const previousTitle = streams.find((stream) =>
+    stream.state === "ended" && stream.creatorId === stream.publisherId
+  )?.title;
+  const title = draftTitle ?? previousTitle ?? "";
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const pending = useRef<{ id: string; title: string } | null>(null);
   const working = useRef(false);
   const generation = useRef(0);
-  const selected = streams.find((stream) => stream.id === selectedID);
-  const isCreator = selected && selected.creatorId === selected.publisherId;
+  const current = streams.find((stream) => stream.state === "live")
+    ?? streams.find((stream) => stream.state === "ready");
+  const endNotice = !current ? streams.find((stream) => stream.state === "ended")?.endReason : undefined;
+  const isCreator = current && current.creatorId === current.publisherId;
 
   useEffect(() => {
     let active = true;
@@ -62,21 +68,21 @@ export default function StreamManager({ invitationsPage, invitee }: { invitation
       let updated: Stream;
       if (operation === "create") {
         pending.current ??= { id: crypto.randomUUID().replaceAll("-", ""), title: title.trim() };
-        updated = await request<Stream>("/api/streams", pending.current);
+        const created = await request<Stream>("/api/streams", pending.current);
+        setStreams((items) => [created, ...items.filter((item) => item.id !== created.id)]);
         pending.current = null;
-        setTitle("");
+        setDraftTitle(null);
+        updated = await request<Stream>(`/api/streams/${created.id}/start`, {});
       } else {
-        if (!selected) return;
+        if (!current) return;
         if (operation === "leave") {
-          await request(`/api/streams/${selected.id}/leave`, {});
-          setStreams((items) => items.filter((item) => item.id !== selected.id));
-          setSelectedID("");
+          await request(`/api/streams/${current.id}/leave`, {});
+          setStreams((items) => items.filter((item) => item.id !== current.id));
           return;
         }
-        updated = await request<Stream>(`/api/streams/${selected.id}/${operation}`, {});
+        updated = await request<Stream>(`/api/streams/${current.id}/${operation}`, {});
       }
       setStreams((items) => [updated, ...items.filter((item) => item.id !== updated.id)]);
-      setSelectedID(updated.id);
     } catch (cause) {
       setError(String(cause));
     } finally {
@@ -96,33 +102,26 @@ export default function StreamManager({ invitationsPage, invitee }: { invitation
       {access?.status === "suspended" && <p role="status">Broadcasting suspended: {access.reason}</p>}
       {access && !canPublish && access.status !== "suspended" &&
         <p role="status">You need broadcaster approval to create a stream or send media.</p>}
-      {selectedID && !selected && <p role="status">This stream has ended or your participation has ended.</p>}
+      {endNotice && <p role="status">Stream ended by staff: {endNotice}</p>}
       {error && <p role="alert">{error}</p>}
-      <div className="studio-setup">
+      {access && !current && <div className="studio-setup">
         <form className="studio-panel" onSubmit={(event) => { event.preventDefault(); void action("create"); }}>
-          <h3>Create a stream</h3>
+          <h3>Your channel is offline</h3>
           <label>Stream title <input value={title} maxLength={200} required disabled={busy}
-            onChange={(event) => { pending.current = null; setTitle(event.target.value); }} /></label>
-          <button className="primary-action" disabled={busy || !canPublish || !title.trim()}>Create stream</button>
+            onChange={(event) => { pending.current = null; setDraftTitle(event.target.value); }} /></label>
+          <button className="primary-action" disabled={busy || !canPublish || !title.trim()}>Go live</button>
         </form>
-        <div className="studio-panel">
-          <h3>Open a stream</h3>
-          <label>Your streams <select value={selectedID} disabled={busy} onChange={(event) => setSelectedID(event.target.value)}>
-            <option value="">Select a stream</option>
-            {streams.map((stream) => <option key={stream.id} value={stream.id}>{stream.title} ({stateLabel[stream.state]})</option>)}
-          </select></label>
-        </div>
-      </div>
-      {selected && (
+      </div>}
+      {current && (
         <section className="studio-current">
           <header className="studio-panel">
-            <p className={selected.state === "live" ? "live-badge" : "studio-state"} role="status">{stateLabel[selected.state]}</p>
-            <h3>{selected.title}</h3>
+            <p className={current.state === "live" ? "live-badge" : "studio-state"} role="status">{stateLabel[current.state]}</p>
+            <h3>{current.title}</h3>
             <p>{isCreator ? "You created this stream." : "You joined as a participant."}</p>
-            {selected.endReason && <p role="status">Stream ended by staff: {selected.endReason}</p>}
-            {isCreator && selected.state === "ready" &&
+            {current.endReason && <p role="status">Stream ended by staff: {current.endReason}</p>}
+            {isCreator && current.state === "ready" &&
               <button className="primary-action" disabled={busy || !canPublish} onClick={() => void action("start")}>Start stream</button>}
-            {selected.state !== "ended" && <div className="studio-exit">
+            {current.state !== "ended" && <div className="studio-exit">
               {isCreator
                 ? <button className="danger-action" disabled={busy} onClick={() => {
                   if (window.confirm("End this stream for everyone? This stream cannot be restarted.")) void action("end");
@@ -130,19 +129,20 @@ export default function StreamManager({ invitationsPage, invitee }: { invitation
                 : <button disabled={busy} onClick={() => void action("leave")}>Leave stream</button>}
             </div>}
           </header>
-          {selected.state === "live" && <div className="watch-layout">
+          {current.state === "live" && <div className="watch-layout">
             <div className="watch-media">
-              {canPublish && <RelayConnection key={`publish-${selected.id}`} streamID={selected.id} />}
-              <SharedStreamViewer key={`view-${selected.id}`} streamID={selected.id} ownAccountID={selected.publisherId} />
+              {canPublish && <RelayConnection key={`publish-${current.id}`} streamID={current.id} />}
+              <SharedStreamViewer key={`view-${current.id}`} streamID={current.id} ownAccountID={current.publisherId} />
             </div>
-            <LiveComments key={`comments-${selected.id}`} streamID={selected.id} />
+            <LiveComments key={`comments-${current.id}`} streamID={current.id} />
           </div>}
         </section>
       )}
     </section>
     <div hidden={!invitationsPage}>
       <StreamInvitations key={invitee ?? ""} invitee={invitee}
-        streams={canPublish ? streams.filter(stream => stream.creatorId === stream.publisherId && stream.state !== "ended") : []}
+        hostStream={canPublish && isCreator && current?.state === "live" ? current : undefined}
+        activeStreamId={current?.state === "live" ? current.id : undefined}
         onChanged={() => { generation.current++; }} />
     </div>
     </>

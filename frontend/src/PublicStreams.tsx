@@ -74,7 +74,6 @@ export function LiveList() {
   return <main className="public-page">
     <header className="page-heading">
       <h1>Live streams</h1>
-      <p>Drop in to watch, work, and chat.</p>
     </header>
     {resource.loading && !resource.data && <p className="public-notice" role="status">Loading live streams…</p>}
     <LoadError message={resource.error || (resource.unavailable ? "Live streams are unavailable." : "")} reload={resource.reload} />
