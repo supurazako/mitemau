@@ -104,7 +104,7 @@ export default function StreamManager({ invitationsPage, invitee }: { invitation
         <p role="status">You need broadcaster approval to create a stream or send media.</p>}
       {endNotice && <p role="status">Stream ended by staff: {endNotice}</p>}
       {error && <p role="alert">{error}</p>}
-      {access && !suspended && !current && <div className="studio-setup">
+      {canPublish && !suspended && !current && <div className="studio-setup">
         <form className="studio-panel" onSubmit={(event) => { event.preventDefault(); void action("create"); }}>
           <h3>Your channel is offline</h3>
           <label>Stream title <input value={title} maxLength={200} required disabled={busy}
