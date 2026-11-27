@@ -9,7 +9,7 @@ import signal
 import subprocess
 import tempfile
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 from urllib.request import urlopen
 
@@ -187,7 +187,7 @@ def main():
     }
     processes = []
     # Reserve the picker port before starting the stack. Keep everything loopback-only.
-    with HTTPServer(("127.0.0.1", 5176), Picker) as picker, tempfile.TemporaryDirectory() as tmp:
+    with ThreadingHTTPServer(("127.0.0.1", 5176), Picker) as picker, tempfile.TemporaryDirectory() as tmp:
         binary = str(Path(tmp) / "backend")
         subprocess.run([go, "build", "-o", binary, "."], cwd=ROOT / "backend", env=BASE_ENV, check=True)
         try:
